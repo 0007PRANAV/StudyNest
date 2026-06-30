@@ -1,0 +1,1714 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>StudyNest</title>
+<style>
+  :root {
+    --bg: #0f0f1a;
+    --surface: #1a1a2e;
+    --card: #16213e;
+    --accent: #00f5c8;
+    --accent2: #7c3aed;
+    --accent3: #f59e0b;
+    --text: #e2e8f0;
+    --muted: #94a3b8;
+    --danger: #ef4444;
+    --success: #22c55e;
+    --border: rgba(255,245,200,0.08);
+    --radius: 16px;
+    --font: 'Segoe UI', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: var(--font); min-height: 100vh; max-width: 480px; margin: 0 auto; position: relative; overflow-x: hidden; }
+
+  /* AUTH */
+  #authScreen { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; }
+  .auth-logo { font-size: 2.4rem; font-weight: 800; color: var(--accent); letter-spacing: -1px; margin-bottom: 4px; }
+  .auth-sub { color: var(--muted); font-size: 0.85rem; margin-bottom: 32px; }
+  .auth-tabs { display: flex; background: var(--surface); border-radius: 12px; padding: 4px; margin-bottom: 24px; width: 100%; }
+  .auth-tab { flex: 1; padding: 10px; text-align: center; border-radius: 8px; cursor: pointer; font-size: 0.9rem; color: var(--muted); transition: all 0.2s; }
+  .auth-tab.active { background: var(--accent2); color: #fff; font-weight: 600; }
+  .auth-form { width: 100%; display: flex; flex-direction: column; gap: 12px; }
+  .inp { background: var(--surface); border: 1.5px solid var(--border); border-radius: 12px; padding: 14px 16px; color: var(--text); font-size: 0.95rem; outline: none; width: 100%; transition: border 0.2s; }
+  .inp:focus { border-color: var(--accent); }
+  .inp::placeholder { color: var(--muted); }
+  .btn { padding: 14px 20px; border-radius: 12px; border: none; cursor: pointer; font-size: 0.95rem; font-weight: 600; transition: all 0.2s; }
+  .btn-primary { background: linear-gradient(135deg, var(--accent2), #4f46e5); color: #fff; }
+  .btn-primary:active { transform: scale(0.97); }
+  .btn-accent { background: var(--accent); color: #0f0f1a; }
+  .btn-accent:active { transform: scale(0.97); }
+  .btn-danger { background: var(--danger); color: #fff; }
+  .btn-ghost { background: transparent; border: 1.5px solid var(--border); color: var(--text); }
+  .ghost-hint { color: var(--muted); font-size: 0.72rem; margin-top: 2px; font-style: italic; }
+
+  /* MAIN APP */
+  #app { display: none; flex-direction: column; min-height: 100vh; }
+  
+  /* TOP BAR */
+  .topbar { background: var(--surface); padding: 14px 18px; display: flex; align-items: center; justify-content: space-between; border-bottom: 1px solid var(--border); position: sticky; top: 0; z-index: 100; }
+  .topbar-title { font-size: 1.1rem; font-weight: 700; color: var(--accent); }
+  .topbar-pfp { width: 36px; height: 36px; border-radius: 50%; background: var(--accent2); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 0.9rem; overflow: hidden; cursor: pointer; }
+  .topbar-pfp img { width: 100%; height: 100%; object-fit: cover; }
+
+  /* CONTENT */
+  .page { display: none; padding: 18px; padding-bottom: 90px; min-height: calc(100vh - 60px); }
+  .page.active { display: block; }
+
+  /* BOTTOM NAV */
+  .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: var(--surface); border-top: 1px solid var(--border); display: flex; z-index: 200; }
+  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px 4px 8px; cursor: pointer; color: var(--muted); font-size: 0.65rem; gap: 3px; transition: color 0.2s; border: none; background: none; }
+  .nav-item.active { color: var(--accent); }
+  .nav-icon { font-size: 1.35rem; }
+
+  /* CARDS */
+  .card { background: var(--card); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; border: 1px solid var(--border); }
+  .section-title { font-size: 1.15rem; font-weight: 700; margin-bottom: 16px; color: var(--text); display: flex; align-items: center; gap: 8px; }
+  .badge { padding: 3px 10px; border-radius: 20px; font-size: 0.7rem; font-weight: 700; }
+  .badge-accent { background: rgba(0,245,200,0.15); color: var(--accent); }
+  .badge-purple { background: rgba(124,58,237,0.2); color: #a78bfa; }
+  .badge-yellow { background: rgba(245,158,11,0.2); color: var(--accent3); }
+
+  /* SUBJECT TABS */
+  .subject-tabs { display: flex; gap: 8px; margin-bottom: 16px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+  .subject-tabs::-webkit-scrollbar { display: none; }
+  .subject-tab { padding: 8px 16px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; white-space: nowrap; border: none; transition: all 0.2s; }
+  .sub-chem { background: rgba(239,68,68,0.15); color: #f87171; }
+  .sub-chem.active { background: #ef4444; color: #fff; }
+  .sub-phys { background: rgba(59,130,246,0.15); color: #60a5fa; }
+  .sub-phys.active { background: #3b82f6; color: #fff; }
+  .sub-maths { background: rgba(0,245,200,0.15); color: var(--accent); }
+  .sub-maths.active { background: var(--accent); color: #0f0f1a; }
+  .sub-eng { background: rgba(245,158,11,0.15); color: var(--accent3); }
+  .sub-eng.active { background: var(--accent3); color: #0f0f1a; }
+
+  /* NOTES */
+  .note-img-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 14px; }
+  .note-img-item { border-radius: 12px; overflow: hidden; aspect-ratio: 4/3; background: var(--surface); position: relative; }
+  .note-img-item img { width: 100%; height: 100%; object-fit: cover; }
+  .note-img-label { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.6); padding: 4px 8px; font-size: 0.7rem; color: #fff; }
+  .add-note-btn { background: var(--surface); border: 2px dashed var(--border); border-radius: 12px; aspect-ratio: 4/3; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; gap: 6px; color: var(--muted); font-size: 0.8rem; }
+  .add-note-btn span { font-size: 1.8rem; }
+
+  /* SEATING */
+  .seating-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 6px; }
+  .seat { background: var(--surface); border-radius: 8px; padding: 6px 4px; text-align: center; font-size: 0.6rem; color: var(--muted); border: 1.5px solid var(--border); cursor: pointer; transition: all 0.2s; min-height: 52px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+  .seat.mine { border-color: var(--accent); background: rgba(0,245,200,0.1); color: var(--accent); }
+  .seat.taken { border-color: var(--accent2); background: rgba(124,58,237,0.1); color: #a78bfa; }
+  .seat .seat-icon { font-size: 1.1rem; }
+  .seat .seat-name { font-size: 0.55rem; max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+  /* FRIENDS */
+  .user-list-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .user-avatar { width: 44px; height: 44px; border-radius: 50%; background: var(--accent2); display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 1rem; overflow: hidden; flex-shrink: 0; }
+  .user-avatar img { width: 100%; height: 100%; object-fit: cover; }
+  .user-info { flex: 1; }
+  .user-name { font-weight: 600; font-size: 0.9rem; }
+  .user-status { font-size: 0.75rem; color: var(--muted); }
+  .user-action { padding: 7px 14px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; cursor: pointer; border: none; }
+  .ua-invite { background: rgba(0,245,200,0.15); color: var(--accent); }
+  .ua-friend { background: rgba(124,58,237,0.2); color: #a78bfa; }
+  .ua-pending { background: rgba(245,158,11,0.15); color: var(--accent3); }
+
+  /* CHAT */
+  .chat-list-item { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .chat-preview { color: var(--muted); font-size: 0.78rem; }
+  .chat-time { font-size: 0.7rem; color: var(--muted); flex-shrink: 0; }
+  .chat-window { display: flex; flex-direction: column; height: calc(100vh - 140px); }
+  .chat-messages { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; padding-bottom: 10px; }
+  .msg { max-width: 78%; padding: 10px 14px; border-radius: 16px; font-size: 0.88rem; line-height: 1.4; }
+  .msg.mine { background: var(--accent2); color: #fff; align-self: flex-end; border-bottom-right-radius: 4px; }
+  .msg.theirs { background: var(--surface); color: var(--text); align-self: flex-start; border-bottom-left-radius: 4px; }
+  .msg-time { font-size: 0.65rem; color: rgba(255,255,255,0.5); margin-top: 3px; text-align: right; }
+  .chat-input-row { display: flex; gap: 8px; padding-top: 10px; border-top: 1px solid var(--border); }
+
+  /* AI */
+  .ai-bubble { background: var(--surface); border-radius: 16px; padding: 14px; margin-bottom: 10px; font-size: 0.88rem; line-height: 1.6; border-left: 3px solid var(--accent); }
+  .ai-thinking { display: flex; gap: 4px; align-items: center; color: var(--muted); font-size: 0.82rem; }
+  .dot { width: 6px; height: 6px; border-radius: 50%; background: var(--accent); animation: bounce 1.2s infinite; }
+  .dot:nth-child(2) { animation-delay: 0.2s; }
+  .dot:nth-child(3) { animation-delay: 0.4s; }
+  @keyframes bounce { 0%,80%,100% { transform: translateY(0); } 40% { transform: translateY(-6px); } }
+
+  /* HOMEWORK */
+  .hw-item { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0; border-bottom: 1px solid var(--border); }
+  .hw-check { width: 22px; height: 22px; border-radius: 6px; border: 2px solid var(--border); cursor: pointer; flex-shrink: 0; display: flex; align-items: center; justify-content: center; margin-top: 1px; transition: all 0.2s; }
+  .hw-check.done { background: var(--success); border-color: var(--success); }
+  .hw-text { flex: 1; font-size: 0.88rem; }
+  .hw-text.done { text-decoration: line-through; color: var(--muted); }
+  .hw-subject { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+  .hw-del { color: var(--danger); font-size: 1rem; cursor: pointer; padding: 4px; }
+
+  /* TIMETABLE */
+  .tt-day { margin-bottom: 18px; }
+  .tt-day-label { font-weight: 700; font-size: 0.85rem; color: var(--accent); margin-bottom: 8px; text-transform: uppercase; letter-spacing: 0.5px; }
+  .tt-slot { display: flex; gap: 10px; align-items: center; padding: 10px 0; border-bottom: 1px solid var(--border); }
+  .tt-time { font-size: 0.75rem; color: var(--muted); width: 68px; flex-shrink: 0; }
+  .tt-subj { flex: 1; font-size: 0.88rem; font-weight: 600; }
+  .tt-room { font-size: 0.75rem; color: var(--muted); }
+
+  /* ANNOUNCEMENTS */
+  .ann-item { padding: 14px; background: var(--surface); border-radius: 12px; margin-bottom: 10px; border-left: 3px solid var(--accent3); }
+  .ann-title { font-weight: 700; margin-bottom: 4px; }
+  .ann-body { font-size: 0.85rem; color: var(--muted); line-height: 1.5; }
+  .ann-meta { font-size: 0.7rem; color: var(--muted); margin-top: 8px; }
+
+  /* PROFILE */
+  .profile-header { display: flex; flex-direction: column; align-items: center; padding: 24px 0 16px; }
+  .profile-pfp { width: 88px; height: 88px; border-radius: 50%; background: var(--accent2); display: flex; align-items: center; justify-content: center; font-size: 2rem; font-weight: 800; overflow: hidden; margin-bottom: 12px; border: 3px solid var(--accent); cursor: pointer; }
+  .profile-pfp img { width: 100%; height: 100%; object-fit: cover; }
+  .profile-name { font-size: 1.3rem; font-weight: 800; }
+  .profile-role { font-size: 0.8rem; color: var(--accent); font-weight: 600; margin-top: 4px; }
+  .profile-field { display: flex; justify-content: space-between; padding: 13px 0; border-bottom: 1px solid var(--border); font-size: 0.9rem; }
+  .profile-field-label { color: var(--muted); }
+  .profile-field-val { font-weight: 500; }
+
+  /* MODAL */
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.7); z-index: 500; display: none; align-items: flex-end; justify-content: center; }
+  .modal-overlay.open { display: flex; }
+  .modal { background: var(--surface); border-radius: 24px 24px 0 0; padding: 20px; width: 100%; max-width: 480px; max-height: 90vh; overflow-y: auto; }
+  .modal-handle { width: 40px; height: 4px; background: var(--border); border-radius: 2px; margin: 0 auto 18px; }
+  .modal-title { font-size: 1.1rem; font-weight: 700; margin-bottom: 16px; }
+
+  /* SEARCH */
+  .search-bar { display: flex; align-items: center; gap: 8px; background: var(--surface); border-radius: 12px; padding: 10px 14px; margin-bottom: 16px; border: 1.5px solid var(--border); }
+  .search-bar input { flex: 1; background: none; border: none; outline: none; color: var(--text); font-size: 0.9rem; }
+  .search-bar input::placeholder { color: var(--muted); }
+
+  /* ADMIN */
+  .admin-badge { background: linear-gradient(135deg, var(--accent3), #f97316); color: #0f0f1a; padding: 2px 8px; border-radius: 20px; font-size: 0.65rem; font-weight: 800; }
+  .action-sheet-item { display: flex; align-items: center; gap: 12px; padding: 15px 0; border-bottom: 1px solid var(--border); cursor: pointer; font-size: 0.9rem; }
+  .action-sheet-item.danger { color: var(--danger); }
+
+  /* MISC */
+  .empty-state { text-align: center; padding: 40px 20px; color: var(--muted); }
+  .empty-state .empty-icon { font-size: 3rem; margin-bottom: 12px; }
+  .empty-state p { font-size: 0.9rem; }
+  .divider { height: 1px; background: var(--border); margin: 16px 0; }
+  .flex-row { display: flex; align-items: center; gap: 10px; }
+  .flex-between { display: flex; align-items: center; justify-content: space-between; }
+  .mt-8 { margin-top: 8px; }
+  .mt-12 { margin-top: 12px; }
+  .mt-16 { margin-top: 16px; }
+  .text-sm { font-size: 0.85rem; }
+  .text-muted { color: var(--muted); }
+  .w-full { width: 100%; }
+  .day-indicator { background: rgba(0,245,200,0.1); border: 1px solid var(--accent); border-radius: 8px; padding: 10px 14px; font-size: 0.82rem; color: var(--accent); margin-bottom: 14px; display: flex; align-items: center; gap: 8px; }
+
+  /* SUSPENDED */
+  #suspendScreen { display: none; align-items: center; justify-content: center; min-height: 100vh; flex-direction: column; gap: 16px; padding: 24px; text-align: center; }
+  #suspendScreen .suspend-icon { font-size: 4rem; }
+  #suspendScreen h2 { font-size: 1.3rem; color: var(--danger); }
+  #suspendScreen p { color: var(--muted); font-size: 0.9rem; }
+
+  textarea { resize: none; }
+  select { appearance: none; -webkit-appearance: none; }
+
+  .pill-row { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 12px; }
+  .pill { padding: 5px 12px; border-radius: 20px; font-size: 0.78rem; font-weight: 600; cursor: pointer; border: 1.5px solid var(--border); color: var(--muted); background: var(--surface); transition: all 0.2s; }
+  .pill.selected { border-color: var(--accent); color: var(--accent); background: rgba(0,245,200,0.1); }
+
+  .img-full-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 999; display: none; align-items: center; justify-content: center; flex-direction: column; gap: 12px; }
+  .img-full-overlay.open { display: flex; }
+  .img-full-overlay img { max-width: 95vw; max-height: 80vh; border-radius: 12px; object-fit: contain; }
+  .img-full-close { color: var(--accent); font-size: 2rem; cursor: pointer; }
+
+  /* CANVA-STYLE NOTE CARDS */
+  .note-card-grid { display: flex; flex-direction: column; gap: 14px; }
+  .note-card {
+    border-radius: 18px; overflow: hidden; position: relative; border: 1px solid var(--border);
+    box-shadow: 0 6px 18px rgba(0,0,0,0.25);
+  }
+  .note-card-img-wrap { position: relative; aspect-ratio: 4/3; overflow: hidden; }
+  .note-card-img-wrap img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .note-card-star {
+    position: absolute; top: 10px; right: 10px; width: 34px; height: 34px; border-radius: 50%;
+    background: rgba(15,15,26,0.55); backdrop-filter: blur(4px); display: flex; align-items: center;
+    justify-content: center; font-size: 1.1rem; cursor: pointer; transition: all 0.2s; border: 1px solid rgba(255,255,255,0.15);
+  }
+  .note-card-star.starred { background: rgba(245,158,11,0.85); }
+  .note-card-body { padding: 14px 16px; }
+  .note-card-title-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 4px; }
+  .note-card-title { font-weight: 700; font-size: 0.98rem; }
+  .note-card-dates { font-size: 0.68rem; color: var(--muted); margin-bottom: 10px; }
+  .note-card-actions { display: flex; flex-wrap: wrap; gap: 6px; }
+  .nc-btn { padding: 6px 11px; border-radius: 16px; font-size: 0.7rem; font-weight: 600; border: none; cursor: pointer; display: flex; align-items: center; gap: 4px; }
+  .nc-ai { background: rgba(124,58,237,0.18); color: #a78bfa; }
+  .nc-share { background: rgba(0,245,200,0.15); color: var(--accent); }
+  .nc-dl { background: rgba(245,158,11,0.15); color: var(--accent3); }
+  .nc-del { background: rgba(239,68,68,0.15); color: #f87171; }
+
+  .nc-theme-0 { background: linear-gradient(160deg, #1e2748, #16213e); }
+  .nc-theme-1 { background: linear-gradient(160deg, #2b1e3e, #16213e); }
+  .nc-theme-2 { background: linear-gradient(160deg, #1e3a3a, #16213e); }
+  .nc-theme-3 { background: linear-gradient(160deg, #3a2a1e, #16213e); }
+  .nc-theme-4 { background: linear-gradient(160deg, #3a1e2a, #16213e); }
+
+  .ai-result-box { background: var(--surface); border-radius: 14px; padding: 14px; margin-top: 10px; border-left: 3px solid var(--accent2); font-size: 0.85rem; line-height: 1.65; white-space: pre-wrap; }
+  .ai-result-label { font-weight: 700; font-size: 0.8rem; color: #a78bfa; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
+  .ai-action-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .ai-mini-btn { padding: 7px 12px; border-radius: 14px; font-size: 0.72rem; font-weight: 600; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
+  .important-flag { display: inline-flex; align-items: center; gap: 3px; background: rgba(245,158,11,0.18); color: var(--accent3); padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 700; margin-left: 6px; }
+  .share-target { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
+  .share-target-icon { width: 38px; height: 38px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; flex-shrink: 0; }
+
+  /* FOLDERS (note files / question paper files) */
+  .img-more-btn { position: absolute; top: 6px; right: 6px; width: 27px; height: 27px; border-radius: 50%; background: rgba(15,15,26,0.65); backdrop-filter: blur(3px); display: flex; align-items: center; justify-content: center; cursor: pointer; font-size: 0.95rem; color: #fff; border: 1px solid rgba(255,255,255,0.15); z-index: 2; }
+  .folder-thumb-empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--surface); font-size: 2.2rem; }
+  .mb-12 { margin-bottom: 12px; }
+  .pdf-progress { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.82rem; margin-top: 10px; }
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="authScreen">
+  <div class="auth-logo">📚 StudyNest</div>
+  <div class="auth-sub">Your smart study companion</div>
+  <div class="auth-tabs">
+    <div class="auth-tab active" onclick="switchAuthTab('login')">Log In</div>
+    <div class="auth-tab" onclick="switchAuthTab('signup')">Sign Up</div>
+  </div>
+  <div class="auth-form" id="loginForm">
+    <input class="inp" id="loginUser" placeholder="Username" type="text">
+    <input class="inp" id="loginPass" placeholder="Password" type="password">
+    <button class="btn btn-primary" onclick="doLogin()">Log In</button>
+    <div id="loginErr" style="color:var(--danger);font-size:0.82rem;text-align:center;display:none;"></div>
+  </div>
+  <div class="auth-form" id="signupForm" style="display:none;">
+    <input class="inp" id="signupName" placeholder="Full name (must be real)" type="text">
+    <div class="ghost-hint">👻 Please use your real name — ghost names aren't allowed</div>
+    <input class="inp" id="signupUser" placeholder="Username" type="text">
+    <input class="inp" id="signupPass" placeholder="Password" type="password">
+    <input class="inp" id="signupAge" placeholder="Age" type="number" min="5" max="30">
+    <button class="btn btn-primary" onclick="doSignup()">Create Account</button>
+    <div id="signupErr" style="color:var(--danger);font-size:0.82rem;text-align:center;display:none;"></div>
+  </div>
+</div>
+
+<!-- SUSPENDED -->
+<div id="suspendScreen">
+  <div class="suspend-icon">🚫</div>
+  <h2>Account Suspended</h2>
+  <p>Your account has been suspended by an admin. Please contact your institute administrator.</p>
+  <button class="btn btn-ghost" onclick="doLogout()" style="margin-top:10px;">Log Out</button>
+</div>
+
+<!-- MAIN APP -->
+<div id="app">
+  <div class="topbar">
+    <div class="topbar-title">📚 StudyNest</div>
+    <div class="topbar-pfp" id="topbarPfp" onclick="goProfile()"></div>
+  </div>
+
+  <!-- PAGES -->
+
+  <!-- HOME / NOTES -->
+  <div class="page active" id="pageNotes">
+    <div class="section-title">📓 My Notes</div>
+    <div class="subject-tabs" id="subjectTabs">
+      <button class="subject-tab sub-chem active" onclick="switchSubject('chemistry',this)">⚗️ Chemistry</button>
+      <button class="subject-tab sub-phys" onclick="switchSubject('physics',this)">⚡ Physics</button>
+      <button class="subject-tab sub-maths" onclick="switchSubject('maths',this)">📐 Maths</button>
+      <button class="subject-tab sub-eng" onclick="switchSubject('english',this)">📖 English</button>
+    </div>
+    <div id="notesContent"></div>
+  </div>
+
+  <!-- QUESTION PAPERS -->
+  <div class="page" id="pageQP">
+    <div class="section-title">🗞️ Question Papers</div>
+    <div class="subject-tabs" id="qpSubjectTabs">
+      <button class="subject-tab sub-chem active" onclick="switchQPSubject('chemistry',this)">⚗️ Chemistry</button>
+      <button class="subject-tab sub-phys" onclick="switchQPSubject('physics',this)">⚡ Physics</button>
+      <button class="subject-tab sub-maths" onclick="switchQPSubject('maths',this)">📐 Maths</button>
+      <button class="subject-tab sub-eng" onclick="switchQPSubject('english',this)">📖 English</button>
+    </div>
+    <div id="qpContent"></div>
+  </div>
+
+  <!-- TIMETABLE -->
+  <div class="page" id="pageTimetable">
+    <div class="section-title">🗓️ Timetable & Info</div>
+    <div id="ttContent"></div>
+  </div>
+
+  <!-- HOMEWORK -->
+  <div class="page" id="pageHomework">
+    <div class="section-title">📝 Homework</div>
+    <div class="card">
+      <div style="font-weight:600;margin-bottom:10px;font-size:0.9rem;">Add Homework</div>
+      <select class="inp" id="hwSubject" style="margin-bottom:10px;">
+        <option value="chemistry">⚗️ Chemistry</option>
+        <option value="physics">⚡ Physics</option>
+        <option value="maths">📐 Maths</option>
+        <option value="english">📖 English</option>
+        <option value="other">📌 Other</option>
+      </select>
+      <textarea class="inp" id="hwText" placeholder="Describe your homework..." rows="3"></textarea>
+      <button class="btn btn-accent mt-12 w-full" onclick="addHomework()">Add Task</button>
+    </div>
+    <div id="hwList"></div>
+  </div>
+
+  <!-- SEATING -->
+  <div class="page" id="pageSeating">
+    <div class="section-title">🪑 Seating Arrangement</div>
+    <div class="day-indicator" id="seatDayLabel">📅 Loading...</div>
+    <div class="card">
+      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px;">Tap an empty seat to claim it for today. Seats refresh daily.</div>
+      <div class="seating-grid" id="seatingGrid"></div>
+    </div>
+    <div class="card mt-12">
+      <div style="font-size:0.8rem;font-weight:600;margin-bottom:6px;">Legend</div>
+      <div style="display:flex;gap:12px;font-size:0.78rem;color:var(--muted);">
+        <span>🟢 Your seat</span>
+        <span>🟣 Taken</span>
+        <span>⬛ Empty</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- FRIENDS -->
+  <div class="page" id="pageFriends">
+    <div class="section-title">👥 Make Friends</div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;">
+      <button class="btn btn-primary" style="flex:1;padding:10px;" onclick="showFriendsTab('friends')">Friends</button>
+      <button class="btn btn-ghost" style="flex:1;padding:10px;" onclick="showFriendsTab('search')">Find People</button>
+      <button class="btn btn-ghost" style="flex:1;padding:10px;" onclick="showFriendsTab('chats')">Chats</button>
+    </div>
+    <div id="friendsTabContent"></div>
+  </div>
+
+  <!-- AI TUTOR -->
+  <div class="page" id="pageAI">
+    <div class="section-title">🤖 AI Tutor</div>
+    <div id="aiMessages" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;"></div>
+    <div class="card" style="margin-bottom:0;">
+      <textarea class="inp" id="aiInput" placeholder="Ask anything — chemistry, physics, maths, English..." rows="2" style="margin-bottom:10px;"></textarea>
+      <button class="btn btn-accent w-full" onclick="sendAI()">Ask AI ✨</button>
+    </div>
+  </div>
+
+  <!-- ANNOUNCEMENTS -->
+  <div class="page" id="pageAnnounce">
+    <div class="section-title">📢 Announcements</div>
+    <div id="announceAdminPanel"></div>
+    <div id="announceList"></div>
+  </div>
+
+  <!-- PROFILE (modal-like page) -->
+  <div class="page" id="pageProfile">
+    <div class="profile-header">
+      <div class="profile-pfp" id="profilePfpBig" onclick="changePfp()"></div>
+      <div style="font-size:0.75rem;color:var(--muted);margin-top:-6px;margin-bottom:8px;">Tap to change photo</div>
+      <div class="profile-name" id="profileNameDisplay"></div>
+      <div class="profile-role" id="profileRoleDisplay"></div>
+    </div>
+    <div class="card">
+      <div class="profile-field" id="pfName"></div>
+      <div class="profile-field" id="pfAge"></div>
+      <div class="profile-field" id="pfUsername"></div>
+    </div>
+    <div class="card mt-12" id="editProfileCard">
+      <div style="font-weight:600;margin-bottom:12px;">Edit Profile</div>
+      <input class="inp" id="editAge" placeholder="Update age" type="number" style="margin-bottom:10px;">
+      <button class="btn btn-primary w-full" onclick="saveProfile()">Save Changes</button>
+    </div>
+    <div class="card mt-12" id="adminPanel" style="display:none;">
+      <div style="font-weight:700;color:var(--accent3);margin-bottom:14px;">⚡ Admin Panel</div>
+      <div id="adminUserList"></div>
+    </div>
+    <button class="btn btn-ghost w-full mt-16" onclick="doLogout()">Log Out</button>
+    <input type="file" id="pfpFileInput" accept="image/*" style="display:none;" onchange="handlePfpUpload(event)">
+  </div>
+
+  <!-- BOTTOM NAV -->
+  <div class="bottom-nav">
+    <button class="nav-item active" onclick="showPage('pageNotes',this)">
+      <span class="nav-icon">📓</span>Notes
+    </button>
+    <button class="nav-item" onclick="showPage('pageTimetable',this)">
+      <span class="nav-icon">🗓️</span>Schedule
+    </button>
+    <button class="nav-item" onclick="showPage('pageHomework',this)">
+      <span class="nav-icon">📝</span>Homework
+    </button>
+    <button class="nav-item" onclick="showPage('pageSeating',this)">
+      <span class="nav-icon">🪑</span>Seats
+    </button>
+    <button class="nav-item" onclick="showPage('pageFriends',this)">
+      <span class="nav-icon">👥</span>Friends
+    </button>
+    <button class="nav-item" onclick="showPage('pageAI',this)">
+      <span class="nav-icon">🤖</span>AI
+    </button>
+    <button class="nav-item" onclick="showPage('pageAnnounce',this)">
+      <span class="nav-icon">📢</span>News
+    </button>
+    <button class="nav-item" onclick="showPage('pageQP',this)">
+      <span class="nav-icon">🗞️</span>Papers
+    </button>
+  </div>
+</div>
+
+<!-- MODALS -->
+<div class="modal-overlay" id="modalOverlay" onclick="closeModal(event)">
+  <div class="modal" id="modalContent">
+    <div class="modal-handle"></div>
+    <div id="modalBody"></div>
+  </div>
+</div>
+
+<!-- Full image viewer -->
+<div class="img-full-overlay" id="imgFullOverlay" onclick="closeImgFull()">
+  <img id="imgFullImg" src="">
+  <div class="img-full-close">✕ Close</div>
+</div>
+
+<input type="file" id="noteImgInput" accept="image/*" multiple style="display:none;" onchange="handleBulkImg(event)">
+<input type="file" id="singleImgInput" accept="image/*" style="display:none;" onchange="handleSingleImg(event)">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+<script>
+// ===== STORAGE HELPERS =====
+const ADMIN_USER = 'admin'; // The first user to register with username "admin" gets admin
+
+function storeGet(key) {
+  try { return JSON.parse(localStorage.getItem('sn_' + key)); } catch(e) { return null; }
+}
+function storeSet(key, val) {
+  try { localStorage.setItem('sn_' + key, JSON.stringify(val)); } catch(e) {}
+}
+
+// ===== STATE =====
+let currentUser = null;
+let currentFriendsTab = 'friends';
+let chatPartner = null;
+
+// ===== INIT =====
+function init() {
+  const sess = storeGet('session');
+  if (sess) {
+    const users = storeGet('users') || {};
+    if (users[sess]) {
+      currentUser = users[sess];
+      if (currentUser.suspended) { showSuspended(); return; }
+      showApp();
+    } else { showAuth(); }
+  } else { showAuth(); }
+  // Seed timetable if empty
+  if (!storeGet('timetable')) seedTimetable();
+}
+
+function showAuth() { document.getElementById('authScreen').style.display='flex'; document.getElementById('app').style.display='none'; document.getElementById('suspendScreen').style.display='none'; }
+function showApp() { document.getElementById('authScreen').style.display='none'; document.getElementById('app').style.display='flex'; document.getElementById('suspendScreen').style.display='none'; renderTopbar(); renderNotes(); renderHomework(); renderSeating(); renderFriends(); renderAnnouncements(); }
+function showSuspended() { document.getElementById('authScreen').style.display='none'; document.getElementById('app').style.display='none'; document.getElementById('suspendScreen').style.display='flex'; }
+
+// ===== AUTH =====
+function switchAuthTab(tab) {
+  document.querySelectorAll('.auth-tab').forEach(t => t.classList.remove('active'));
+  event.target.classList.add('active');
+  document.getElementById('loginForm').style.display = tab === 'login' ? 'flex' : 'none';
+  document.getElementById('signupForm').style.display = tab === 'signup' ? 'flex' : 'none';
+}
+
+function doLogin() {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  const users = storeGet('users') || {};
+  const err = document.getElementById('loginErr');
+  if (!users[u] || users[u].password !== p) { err.textContent = 'Invalid username or password'; err.style.display='block'; return; }
+  currentUser = users[u];
+  storeSet('session', u);
+  err.style.display='none';
+  if (currentUser.suspended) { showSuspended(); return; }
+  showApp();
+}
+
+function doSignup() {
+  const name = document.getElementById('signupName').value.trim();
+  const u = document.getElementById('signupUser').value.trim().toLowerCase();
+  const p = document.getElementById('signupPass').value;
+  const age = document.getElementById('signupAge').value;
+  const err = document.getElementById('signupErr');
+  if (!name || !u || !p || !age) { err.textContent = 'Please fill all fields'; err.style.display='block'; return; }
+  if (name.length < 3) { err.textContent = 'Please use your real full name'; err.style.display='block'; return; }
+  const users = storeGet('users') || {};
+  if (users[u]) { err.textContent = 'Username taken'; err.style.display='block'; return; }
+  const isFirstAdmin = Object.keys(users).length === 0 || u === ADMIN_USER;
+  const newUser = { username: u, name, password: p, age: parseInt(age), role: isFirstAdmin ? 'admin' : 'student', pfp: null, suspended: false, friends: [], pendingOut: [], pendingIn: [], joinedAt: Date.now() };
+  users[u] = newUser;
+  storeSet('users', users);
+  currentUser = newUser;
+  storeSet('session', u);
+  err.style.display='none';
+  showApp();
+}
+
+function doLogout() { storeSet('session', null); currentUser = null; showAuth(); }
+
+// ===== TOPBAR =====
+function renderTopbar() {
+  const pfp = document.getElementById('topbarPfp');
+  if (currentUser.pfp) { pfp.innerHTML = `<img src="${currentUser.pfp}">`; }
+  else { pfp.textContent = currentUser.name[0].toUpperCase(); }
+}
+
+function goProfile() { showPage('pageProfile', null); renderProfile(); }
+
+// ===== PAGE NAVIGATION =====
+function showPage(id, btn) {
+  document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
+  if (btn) btn.classList.add('active');
+  if (id === 'pageNotes') renderNotes();
+  if (id === 'pageQP') renderQP();
+  if (id === 'pageSeating') renderSeating();
+  if (id === 'pageFriends') renderFriends();
+  if (id === 'pageAnnounce') renderAnnouncements();
+  if (id === 'pageTimetable') renderTimetable();
+  if (id === 'pageHomework') renderHomework();
+  if (id === 'pageProfile') renderProfile();
+  if (id === 'pageAI') { const ai = document.getElementById('aiMessages'); if(!ai.children.length) ai.innerHTML = `<div class="ai-bubble">👋 Hello! I'm your AI Tutor. Ask me anything about Chemistry, Physics, Maths, English or any subject!</div>`; }
+}
+
+// ===== NOTES & QUESTION PAPERS (folder-based, shared engine) =====
+// "kind" is either 'notes' or 'qp' — both reuse the exact same engine.
+let currentSubject = 'chemistry';   // notes subject
+let currentQPSubject = 'chemistry'; // question papers subject
+let openFolderCtx = null;           // { kind, id } — folder currently open, if any
+let pendingFolderName = '';
+let pendingUpload = null;           // { kind, folderId, mode:'add'|'replace', imgIdx, label }
+let aiCtx = null;                   // { kind, folderId, idx } for AI tools modal
+
+function fKey(kind, subject) { return (kind === 'qp' ? 'qp_' : 'notes_') + currentUser.username + '_' + subject; }
+function getSubj(kind) { return kind === 'qp' ? currentQPSubject : currentSubject; }
+function setSubj(kind, s) { if (kind === 'qp') currentQPSubject = s; else currentSubject = s; }
+function contentId(kind) { return kind === 'qp' ? 'qpContent' : 'notesContent'; }
+function tabsId(kind) { return kind === 'qp' ? 'qpSubjectTabs' : 'subjectTabs'; }
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+
+function getFolders(kind, subject) {
+  let data = storeGet(fKey(kind, subject));
+  if (!Array.isArray(data)) return [];
+  // migrate legacy flat note arrays (old single-image-per-entry format) into a default folder
+  if (data.length && data[0] && data[0].img !== undefined && data[0].images === undefined) {
+    data = [{ id: 'legacy', name: kind === 'qp' ? 'Question Papers' : 'My Notes', ts: Date.now(), images: data }];
+    storeSet(fKey(kind, subject), data);
+  }
+  return data;
+}
+function saveFolders(kind, subject, folders) { storeSet(fKey(kind, subject), folders); }
+
+function renderNotes() { renderSection('notes'); }
+function renderQP() { renderSection('qp'); }
+
+function renderSection(kind) {
+  const subject = getSubj(kind);
+  if (openFolderCtx && openFolderCtx.kind === kind) {
+    renderFolderDetail(kind, openFolderCtx.id);
+  } else {
+    renderFolderList(kind, subject, getFolders(kind, subject));
+  }
+}
+
+function switchSubject(subject, btn) { switchSubjectKind('notes', subject, btn); }
+function switchQPSubject(subject, btn) { switchSubjectKind('qp', subject, btn); }
+function switchSubjectKind(kind, subject, btn) {
+  setSubj(kind, subject);
+  openFolderCtx = null;
+  document.querySelectorAll('#' + tabsId(kind) + ' .subject-tab').forEach(t => t.classList.remove('active'));
+  btn.classList.add('active');
+  renderSection(kind);
+}
+
+function formatDate(ts) {
+  if (!ts) return '';
+  const d = new Date(ts);
+  return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+}
+function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); }
+function detectMime(dataUrl) { const m = dataUrl.match(/^data:(image\/[a-z]+);base64,/); return m ? m[1] : 'image/jpeg'; }
+
+// ---- Folder list ----
+function renderFolderList(kind, subject, folders) {
+  const content = document.getElementById(contentId(kind));
+  const noun = kind === 'qp' ? 'question papers' : 'notes';
+  let html = `<button class="btn btn-accent w-full mb-12" onclick="openNewFolder('${kind}')">➕ New File (e.g. a chapter)</button>`;
+  if (!folders.length) {
+    html += `<div class="empty-state"><div class="empty-icon">📁</div><p>No files yet for this subject.<br>Create a file, then add photos of your ${noun} to it — you can add several files for different chapters or papers, and turn each one into a PDF.</p></div>`;
+  } else {
+    html += `<div class="note-card-grid">`;
+    folders.slice().sort((a, b) => (b.ts || 0) - (a.ts || 0)).forEach(f => {
+      const realIdx = folders.indexOf(f);
+      const theme = 'nc-theme-' + (realIdx % 5);
+      const thumb = f.images[0] ? f.images[0].img : null;
+      html += `<div class="note-card ${theme}" style="cursor:pointer;" onclick="openFolderView('${kind}','${f.id}')">
+        <div class="note-card-img-wrap">${thumb ? `<img src="${thumb}">` : `<div class="folder-thumb-empty">📁</div>`}</div>
+        <div class="note-card-body">
+          <div class="note-card-title-row"><div class="note-card-title">${f.name}</div></div>
+          <div class="note-card-dates">${f.images.length} photo${f.images.length === 1 ? '' : 's'} · Updated ${formatDate(f.ts)}</div>
+          <div class="note-card-actions">
+            <button class="nc-btn nc-share" onclick="event.stopPropagation();openFolderView('${kind}','${f.id}')">📂 Open</button>
+            <button class="nc-btn nc-dl" onclick="event.stopPropagation();generateFolderPDF('${kind}','${f.id}')">📄 Make PDF</button>
+            <button class="nc-btn nc-del" onclick="event.stopPropagation();deleteFolder('${kind}','${f.id}')">🗑️</button>
+          </div>
+        </div>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  if (kind === 'notes') {
+    const sharedWith = storeGet('noteShared_' + currentUser.username) || [];
+    html += `<div class="card mt-16">
+      <div class="flex-between" style="margin-bottom:10px;">
+        <div style="font-weight:600;font-size:0.9rem;">👁️ Shared With</div>
+        <button class="btn btn-ghost" style="padding:6px 12px;font-size:0.78rem;" onclick="openShareModal()">Invite</button>
+      </div>`;
+    if (sharedWith.length === 0) {
+      html += `<div class="text-muted text-sm">Not shared with anyone yet.</div>`;
+    } else {
+      sharedWith.forEach(u => {
+        html += `<div class="flex-between" style="padding:7px 0;border-bottom:1px solid var(--border);">
+          <span class="text-sm">${u}</span>
+          <span onclick="removeShare('${u}')" style="color:var(--danger);cursor:pointer;font-size:0.8rem;">Remove</span>
+        </div>`;
+      });
+    }
+    html += `</div>`;
+  }
+  content.innerHTML = html;
+}
+
+function openNewFolder(kind) {
+  pendingFolderName = '';
+  openModal(`<div class="modal-title">📁 New File</div>
+    <input class="inp" id="folderNameInp" placeholder="e.g. Chapter 4 — Acids & Bases" style="margin-bottom:12px;">
+    <button class="btn btn-accent w-full" onclick="createFolder('${kind}')">Create</button>`);
+}
+function createFolder(kind) {
+  const name = (document.getElementById('folderNameInp').value || '').trim();
+  if (!name) { showToast('Please name this file.'); return; }
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = { id: uid(), name, ts: Date.now(), images: [] };
+  folders.push(folder);
+  saveFolders(kind, subject, folders);
+  closeModalDirect();
+  openFolderCtx = { kind, id: folder.id };
+  renderSection(kind);
+  showToast('File created — now add some photos!');
+}
+function renameFolder(kind, folderId) {
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  if (!folder) return;
+  openModal(`<div class="modal-title">✏️ Rename File</div>
+    <input class="inp" id="folderRenameInp" value="${folder.name.replace(/"/g,'&quot;')}" style="margin-bottom:12px;">
+    <button class="btn btn-accent w-full" onclick="saveFolderRename('${kind}','${folderId}')">Save</button>`);
+}
+function saveFolderRename(kind, folderId) {
+  const name = (document.getElementById('folderRenameInp').value || '').trim();
+  if (!name) return;
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  folder.name = name;
+  folder.ts = Date.now();
+  saveFolders(kind, subject, folders);
+  closeModalDirect();
+  renderSection(kind);
+}
+function deleteFolder(kind, folderId) {
+  if (!confirm('Delete this file and all photos inside it? This cannot be undone.')) return;
+  const subject = getSubj(kind);
+  let folders = getFolders(kind, subject);
+  folders = folders.filter(f => f.id !== folderId);
+  saveFolders(kind, subject, folders);
+  if (openFolderCtx && openFolderCtx.id === folderId) openFolderCtx = null;
+  renderSection(kind);
+  showToast('File deleted.');
+}
+
+// ---- Folder detail (the photos inside one file) ----
+function openFolderView(kind, folderId) { openFolderCtx = { kind, id: folderId }; renderSection(kind); }
+function closeFolderView(kind) { openFolderCtx = null; renderSection(kind); }
+
+function renderFolderDetail(kind, folderId) {
+  const subject = getSubj(kind);
+  const content = document.getElementById(contentId(kind));
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  if (!folder) { openFolderCtx = null; renderSection(kind); return; }
+  let html = `<div class="flex-between mb-12">
+    <button class="btn btn-ghost" style="padding:8px 14px;" onclick="closeFolderView('${kind}')">← Back to files</button>
+    <span style="display:flex;gap:8px;">
+      <button class="btn btn-ghost" style="padding:8px 12px;" onclick="renameFolder('${kind}','${folderId}')">✏️</button>
+      <button class="btn btn-ghost" style="padding:8px 12px;color:var(--danger);" onclick="deleteFolder('${kind}','${folderId}')">🗑️</button>
+    </span>
+  </div>
+  <div class="section-title" style="margin-bottom:10px;">📁 ${folder.name}</div>
+  <div style="display:flex;gap:8px;margin-bottom:16px;">
+    <button class="btn btn-accent" style="flex:1;" onclick="openAddPhotos('${kind}','${folderId}')">📸 Add Photos</button>
+    <button class="btn btn-primary" style="flex:1;" onclick="generateFolderPDF('${kind}','${folderId}')">📄 Make PDF</button>
+  </div>
+  <div id="pdfProgress_${kind}"></div>`;
+  if (!folder.images.length) {
+    html += `<div class="empty-state"><div class="empty-icon">📄</div><p>No photos yet.<br>Tap "Add Photos" — you can select several at once.</p></div>`;
+  } else {
+    html += `<div class="note-img-grid">`;
+    folder.images.forEach((img, i) => {
+      html += `<div class="note-img-item">
+        <img src="${img.img}" onclick="viewNoteImg('${img.img}')">
+        <div class="note-img-label">${img.label || ('Page ' + (i + 1))}${img.important ? ' ⭐' : ''}</div>
+        <div class="img-more-btn" onclick="event.stopPropagation();openImageActions('${kind}','${folderId}',${i})">⋯</div>
+      </div>`;
+    });
+    html += `</div>`;
+    html += `<div class="text-muted text-sm mt-12">Tap a photo to view it full screen, or use ⋯ to edit, share, download or delete it.</div>`;
+  }
+  content.innerHTML = html;
+}
+
+function viewNoteImg(src) {
+  document.getElementById('imgFullImg').src = src;
+  document.getElementById('imgFullOverlay').classList.add('open');
+}
+function closeImgFull() { document.getElementById('imgFullOverlay').classList.remove('open'); }
+
+// ---- Adding / editing / deleting photos ----
+function openAddPhotos(kind, folderId) {
+  pendingUpload = { kind, folderId, mode: 'add' };
+  document.getElementById('noteImgInput').click();
+}
+function handleBulkImg(event) {
+  const files = Array.from(event.target.files || []);
+  event.target.value = '';
+  if (!files.length || !pendingUpload) return;
+  const { kind, folderId } = pendingUpload;
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  if (!folder) return;
+  Promise.all(files.map(file => new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = e => resolve(e.target.result);
+    reader.readAsDataURL(file);
+  }))).then(results => {
+    const now = Date.now();
+    results.forEach((dataUrl, i) => {
+      folder.images.push({ img: dataUrl, label: files.length > 1 ? `Page ${folder.images.length + 1}` : '', ts: now, editedAt: now, important: false, aiHandwriting: null, aiSummary: null });
+    });
+    folder.ts = now;
+    saveFolders(kind, subject, folders);
+    renderSection(kind);
+    showToast(files.length > 1 ? `${files.length} photos added!` : 'Photo added!');
+  });
+}
+
+function openImageActions(kind, folderId, idx) {
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  const img = folder.images[idx];
+  let html = `<div class="modal-title">${img.label || 'Photo ' + (idx + 1)}</div>
+    <div class="action-sheet-item" onclick="closeModalDirect();viewNoteImg('${img.img}')">👁️ View Full Screen</div>
+    <div class="action-sheet-item" onclick="closeModalDirect();openEditImage('${kind}','${folderId}',${idx})">✏️ Edit (rename / replace photo)</div>
+    <div class="action-sheet-item" onclick="toggleImageImportant('${kind}','${folderId}',${idx})">${img.important ? '☆ Unmark Important' : '⭐ Mark Important'}</div>`;
+  if (kind === 'notes') {
+    html += `<div class="action-sheet-item" onclick="openImageAI('${kind}','${folderId}',${idx})">✨ AI Tools</div>`;
+  }
+  html += `<div class="action-sheet-item" onclick="closeModalDirect();openImageShare('${kind}','${folderId}',${idx})">📤 Share</div>
+    <div class="action-sheet-item" onclick="downloadImage('${kind}','${folderId}',${idx})">⬇️ Download</div>
+    <div class="action-sheet-item danger" onclick="closeModalDirect();deleteImage('${kind}','${folderId}',${idx})">🗑️ Delete</div>`;
+  openModal(html);
+}
+
+function toggleImageImportant(kind, folderId, idx) {
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  folder.images[idx].important = !folder.images[idx].important;
+  folder.images[idx].editedAt = Date.now();
+  saveFolders(kind, subject, folders);
+  closeModalDirect();
+  renderSection(kind);
+}
+
+function openEditImage(kind, folderId, idx) {
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  const img = folder.images[idx];
+  openModal(`<div class="modal-title">✏️ Edit Photo</div>
+    <input class="inp" id="editImgLabelInp" placeholder="Label (e.g. Page 1)" value="${(img.label || '').replace(/"/g,'&quot;')}" style="margin-bottom:12px;">
+    <button class="btn btn-primary w-full mb-12" onclick="saveImageLabel('${kind}','${folderId}',${idx})">Save Label</button>
+    <button class="btn btn-ghost w-full" onclick="triggerReplaceImage('${kind}','${folderId}',${idx})">🔄 Replace Photo</button>`);
+}
+function saveImageLabel(kind, folderId, idx) {
+  const label = document.getElementById('editImgLabelInp').value || '';
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  folder.images[idx].label = label;
+  folder.images[idx].editedAt = Date.now();
+  saveFolders(kind, subject, folders);
+  closeModalDirect();
+  renderSection(kind);
+  showToast('Saved!');
+}
+function triggerReplaceImage(kind, folderId, idx) {
+  pendingUpload = { kind, folderId, mode: 'replace', imgIdx: idx };
+  closeModalDirect();
+  document.getElementById('singleImgInput').click();
+}
+function handleSingleImg(event) {
+  const file = event.target.files[0];
+  event.target.value = '';
+  if (!file || !pendingUpload) return;
+  const { kind, folderId, imgIdx } = pendingUpload;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const subject = getSubj(kind);
+    const folders = getFolders(kind, subject);
+    const folder = folders.find(f => f.id === folderId);
+    folder.images[imgIdx].img = e.target.result;
+    folder.images[imgIdx].editedAt = Date.now();
+    saveFolders(kind, subject, folders);
+    renderSection(kind);
+    showToast('Photo replaced!');
+  };
+  reader.readAsDataURL(file);
+}
+function deleteImage(kind, folderId, idx) {
+  if (!confirm('Delete this photo? This cannot be undone.')) return;
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  folder.images.splice(idx, 1);
+  saveFolders(kind, subject, folders);
+  renderSection(kind);
+  showToast('Photo deleted.');
+}
+function downloadImage(kind, folderId, idx) {
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  const img = folder.images[idx];
+  const a = document.createElement('a');
+  a.href = img.img;
+  a.download = (img.label || folder.name || 'photo').replace(/[^a-z0-9]/gi, '_') + '.jpg';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  showToast('Downloading photo…');
+}
+
+// ---- PDF export (combines every photo in a folder into one PDF) ----
+function getImageDims(src) {
+  return new Promise(resolve => {
+    const i = new Image();
+    i.onload = () => resolve({ w: i.naturalWidth || i.width, h: i.naturalHeight || i.height });
+    i.onerror = () => resolve({ w: 800, h: 600 });
+    i.src = src;
+  });
+}
+async function generateFolderPDF(kind, folderId) {
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  if (!folder || !folder.images.length) { showToast('Add some photos to this file first.'); return; }
+  if (!window.jspdf) { showToast('PDF library failed to load — check your connection.'); return; }
+  const progressEl = document.getElementById('pdfProgress_' + kind);
+  if (progressEl) progressEl.innerHTML = `<div class="pdf-progress">⏳ Generating PDF from ${folder.images.length} photo(s)…</div>`;
+  showToast('Generating PDF…');
+  try {
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({ unit: 'pt', format: 'a4' });
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    const margin = 28;
+    for (let i = 0; i < folder.images.length; i++) {
+      const img = folder.images[i];
+      const dims = await getImageDims(img.img);
+      if (i > 0) doc.addPage();
+      doc.setFontSize(10);
+      doc.setTextColor(120);
+      doc.text(`${folder.name} — ${img.label || 'Page ' + (i + 1)}`, margin, margin);
+      const maxW = pageW - margin * 2;
+      const maxH = pageH - margin * 2 - 24;
+      let w = dims.w, h = dims.h;
+      const scale = Math.min(maxW / w, maxH / h, 1) || 1;
+      w *= scale; h *= scale;
+      const x = (pageW - w) / 2;
+      const y = margin + 20;
+      const format = img.img.indexOf('image/png') > -1 ? 'PNG' : 'JPEG';
+      doc.addImage(img.img, format, x, y, w, h);
+    }
+    doc.save((folder.name || 'notes').replace(/[^a-z0-9]/gi, '_') + '.pdf');
+    showToast('PDF downloaded!');
+  } catch (e) {
+    showToast('Could not generate PDF — please try again.');
+  }
+  if (progressEl) progressEl.innerHTML = '';
+}
+
+// ---- Share (per photo) ----
+function openImageShare(kind, folderId, idx) {
+  openModal(`<div class="modal-title">📤 Share Photo</div>
+    <div class="share-target" onclick="shareToWhatsApp()">
+      <div class="share-target-icon" style="background:rgba(37,211,102,0.15);color:#25D366;">💬</div>
+      <div><div style="font-weight:600;font-size:0.9rem;">WhatsApp</div><div class="text-muted" style="font-size:0.75rem;">Send to a contact or group</div></div>
+    </div>
+    <div class="share-target" onclick="shareToDrive()">
+      <div class="share-target-icon" style="background:rgba(66,133,244,0.15);color:#4285F4;">📁</div>
+      <div><div style="font-weight:600;font-size:0.9rem;">Google Drive</div><div class="text-muted" style="font-size:0.75rem;">Upload to your Drive</div></div>
+    </div>
+    <div class="share-target" onclick="shareImageNative('${kind}','${folderId}',${idx})">
+      <div class="share-target-icon" style="background:rgba(0,245,200,0.15);color:var(--accent);">🔗</div>
+      <div><div style="font-weight:600;font-size:0.9rem;">More options</div><div class="text-muted" style="font-size:0.75rem;">Use your phone's share menu</div></div>
+    </div>
+    ${kind === 'notes' ? `<div class="share-target" onclick="openShareModal();closeModalDirect();" style="border-bottom:none;">
+      <div class="share-target-icon" style="background:rgba(124,58,237,0.15);color:#a78bfa;">👥</div>
+      <div><div style="font-weight:600;font-size:0.9rem;">Share with a friend</div><div class="text-muted" style="font-size:0.75rem;">Inside StudyNest</div></div>
+    </div>` : ''}
+  `);
+}
+async function shareImageNative(kind, folderId, idx) {
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  const img = folder.images[idx];
+  try {
+    if (navigator.share) {
+      const blob = await (await fetch(img.img)).blob();
+      const file = new File([blob], (img.label || 'photo') + '.jpg', { type: blob.type });
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({ files: [file], title: img.label || 'My Photo' });
+        return;
+      }
+      await navigator.share({ title: img.label || 'My Photo', text: 'Check this out from StudyNest!' });
+    } else {
+      showToast('Sharing not supported on this device — try Download instead.');
+    }
+  } catch (e) { /* user cancelled */ }
+}
+function shareToWhatsApp() {
+  showToast('Opening WhatsApp…');
+  window.open('https://wa.me/?text=' + encodeURIComponent('Check out my study materials from StudyNest! 📚'), '_blank');
+}
+function shareToDrive() {
+  showToast('Opening Google Drive…');
+  window.open('https://drive.google.com/drive/my-drive', '_blank');
+}
+
+// ---- AI tools (notes only): rewrite handwriting, summarize ----
+function openImageAI(kind, folderId, idx) {
+  aiCtx = { kind, folderId, idx };
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  const img = folder.images[idx];
+  openModal(`<div class="modal-title">✨ AI Tools — ${img.label || 'Photo'}</div>
+    <div style="display:flex;flex-direction:column;gap:10px;">
+      <button class="btn btn-primary w-full" onclick="aiRewriteHandwriting()">✍️ Rewrite in Neat Handwriting</button>
+      <button class="btn btn-accent w-full" onclick="aiSummarizeNote()">🧠 Summarize Simply</button>
+    </div>
+    <div id="aiToolsResult"></div>`);
+}
+function getAiCtx() {
+  const { kind, folderId, idx } = aiCtx;
+  const subject = getSubj(kind);
+  const folders = getFolders(kind, subject);
+  const folder = folders.find(f => f.id === folderId);
+  return { folders, subject, folder, img: folder.images[idx] };
+}
+async function aiRewriteHandwriting() {
+  const { img } = getAiCtx();
+  const resultBox = document.getElementById('aiToolsResult');
+  resultBox.innerHTML = `<div class="ai-thinking mt-12"><div class="dot"></div><div class="dot"></div><div class="dot"></div> Reading the photo & rewriting it neatly...</div>`;
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: [
+          { type: 'image', source: { type: 'base64', media_type: detectMime(img.img), data: img.img.split(',')[1] } },
+          { type: 'text', text: 'Transcribe the handwritten or printed notes in this image exactly as written, preserving structure (headings, bullet points, numbered steps, equations). Output ONLY the clean transcribed text, well-organized with line breaks — no preamble, no commentary.' }
+        ]}]
+      })
+    });
+    const data = await response.json();
+    const text = data.content?.[0]?.text || 'Could not read the photo.';
+    const ctx = getAiCtx();
+    ctx.img.aiHandwriting = text;
+    ctx.img.editedAt = Date.now();
+    saveFolders(aiCtx.kind, ctx.subject, ctx.folders);
+    renderAIResult('✍️ Neat Rewrite', text, 'handwriting');
+  } catch (e) {
+    resultBox.innerHTML = `<div class="ai-result-box" style="border-color:var(--danger);">⚠️ Connection error. Please try again.</div>`;
+  }
+}
+async function aiSummarizeNote() {
+  const { img } = getAiCtx();
+  const resultBox = document.getElementById('aiToolsResult');
+  resultBox.innerHTML = `<div class="ai-thinking mt-12"><div class="dot"></div><div class="dot"></div><div class="dot"></div> Reading & summarizing...</div>`;
+  try {
+    const response = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: "claude-sonnet-4-6",
+        max_tokens: 1000,
+        messages: [{ role: "user", content: [
+          { type: 'image', source: { type: 'base64', media_type: detectMime(img.img), data: img.img.split(',')[1] } },
+          { type: 'text', text: 'Look at these study notes and write a unique, friendly, very easy-to-understand summary of the key ideas, like explaining to a friend. Use simple language, short sentences, and a couple of relatable analogies if helpful. Use emojis sparingly. Keep it well organized with line breaks.' }
+        ]}]
+      })
+    });
+    const data = await response.json();
+    const text = data.content?.[0]?.text || 'Could not summarize the photo.';
+    const ctx = getAiCtx();
+    ctx.img.aiSummary = text;
+    ctx.img.editedAt = Date.now();
+    saveFolders(aiCtx.kind, ctx.subject, ctx.folders);
+    renderAIResult('🧠 Easy Summary', text, 'summary');
+  } catch (e) {
+    resultBox.innerHTML = `<div class="ai-result-box" style="border-color:var(--danger);">⚠️ Connection error. Please try again.</div>`;
+  }
+}
+function renderAIResult(label, text, kind) {
+  const resultBox = document.getElementById('aiToolsResult');
+  resultBox.innerHTML = `
+    <div class="ai-result-box">
+      <div class="ai-result-label">${label}</div>
+      <div id="aiResultText">${escapeHtml(text)}</div>
+      <div class="ai-action-row">
+        <button class="ai-mini-btn" onclick="readAloud(\`${text.replace(/`/g,"'").replace(/\\/g,'')}\`)">🔊 Read Aloud</button>
+        <button class="ai-mini-btn" onclick="downloadAIText('${kind}')">⬇️ Download</button>
+        <button class="ai-mini-btn" onclick="copyAIText('${kind}')">📋 Copy</button>
+      </div>
+    </div>`;
+}
+let currentUtterance = null;
+function readAloud(text) {
+  if (!('speechSynthesis' in window)) { showToast('Read aloud not supported on this device.'); return; }
+  window.speechSynthesis.cancel();
+  const utter = new SpeechSynthesisUtterance(text);
+  utter.rate = 0.95;
+  currentUtterance = utter;
+  window.speechSynthesis.speak(utter);
+  showToast('🔊 Reading aloud...');
+}
+function downloadAIText(kind) {
+  const { img } = getAiCtx();
+  const text = kind === 'handwriting' ? img.aiHandwriting : img.aiSummary;
+  if (!text) return;
+  const blob = new Blob([text], { type: 'text/plain' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = (img.label || 'note') + (kind === 'handwriting' ? '_rewritten' : '_summary') + '.txt';
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+  showToast('Downloaded!');
+}
+function copyAIText(kind) {
+  const { img } = getAiCtx();
+  const text = kind === 'handwriting' ? img.aiHandwriting : img.aiSummary;
+  navigator.clipboard?.writeText(text).then(() => showToast('Copied to clipboard!')).catch(() => showToast('Could not copy.'));
+}
+
+// ---- Sharing notes with friends ----
+function openShareModal() {
+  const users = storeGet('users') || {};
+  const sharedWith = storeGet('noteShared_' + currentUser.username) || [];
+  let html = `<div class="modal-title">Share Notes With</div>
+    <div class="search-bar"><span>🔍</span><input id="shareSearch" placeholder="Search users..." oninput="filterShareList()"></div>
+    <div id="shareUserList">`;
+  Object.values(users).forEach(u => {
+    if (u.username === currentUser.username) return;
+    const isShared = sharedWith.includes(u.username);
+    html += `<div class="user-list-item">
+      <div class="user-avatar">${u.pfp ? `<img src="${u.pfp}">` : (u.name[0].toUpperCase())}</div>
+      <div class="user-info"><div class="user-name">${u.name}</div><div class="user-status">@${u.username}</div></div>
+      <button class="user-action ${isShared ? 'ua-friend' : 'ua-invite'}" onclick="toggleShare('${u.username}',this)">${isShared ? '✓ Shared' : 'Share'}</button>
+    </div>`;
+  });
+  html += `</div>`;
+  openModal(html);
+}
+function filterShareList() {
+  const q = document.getElementById('shareSearch').value.toLowerCase();
+  document.querySelectorAll('#shareUserList .user-list-item').forEach(item => {
+    item.style.display = item.textContent.toLowerCase().includes(q) ? '' : 'none';
+  });
+}
+function toggleShare(username, btn) {
+  const sharedWith = storeGet('noteShared_' + currentUser.username) || [];
+  const idx = sharedWith.indexOf(username);
+  if (idx === -1) { sharedWith.push(username); btn.textContent = '✓ Shared'; btn.className = 'user-action ua-friend'; }
+  else { sharedWith.splice(idx, 1); btn.textContent = 'Share'; btn.className = 'user-action ua-invite'; }
+  storeSet('noteShared_' + currentUser.username, sharedWith);
+}
+function removeShare(u) {
+  const sharedWith = storeGet('noteShared_' + currentUser.username) || [];
+  storeSet('noteShared_' + currentUser.username, sharedWith.filter(x => x !== u));
+  renderNotes();
+}
+
+// Shared notes viewer (people who have been shared can only view)
+function viewSharedNotes(ownerUsername, subject) {
+  let data = storeGet('notes_' + ownerUsername + '_' + subject);
+  if (!Array.isArray(data)) data = [];
+  if (data.length && data[0] && data[0].img !== undefined && data[0].images === undefined) {
+    data = [{ id: 'legacy', name: 'My Notes', ts: Date.now(), images: data }];
+  }
+  const users = storeGet('users') || {};
+  const owner = users[ownerUsername];
+  let html = `<div class="modal-title">📚 ${owner?.name}'s ${subject} Notes</div>`;
+  const allImages = [];
+  data.forEach(f => f.images.forEach(img => allImages.push({ ...img, folderName: f.name })));
+  if (!allImages.length) { html += `<div class="empty-state"><div class="empty-icon">📄</div><p>No notes yet.</p></div>`; }
+  else {
+    html += `<div class="note-img-grid">`;
+    allImages.forEach((n, i) => { html += `<div class="note-img-item" onclick="viewNoteImg('${n.img}')"><img src="${n.img}"><div class="note-img-label">${n.label || n.folderName || ('Note ' + (i + 1))}</div></div>`; });
+    html += `</div>`;
+  }
+  openModal(html);
+}
+
+// ===== TIMETABLE =====
+function seedTimetable() {
+  const tt = {
+    Monday: [{time:'8:00–9:00',subj:'⚗️ Chemistry',room:'Lab 1'},{time:'9:10–10:10',subj:'📐 Maths',room:'Room 3'},{time:'10:20–11:20',subj:'⚡ Physics',room:'Room 5'},{time:'11:30–12:30',subj:'📖 English',room:'Room 2'}],
+    Tuesday: [{time:'8:00–9:00',subj:'📐 Maths',room:'Room 3'},{time:'9:10–10:10',subj:'📖 English',room:'Room 2'},{time:'10:20–11:20',subj:'⚗️ Chemistry',room:'Lab 1'},{time:'11:30–12:30',subj:'⚡ Physics',room:'Room 5'}],
+    Wednesday: [{time:'8:00–9:00',subj:'⚡ Physics',room:'Room 5'},{time:'9:10–10:10',subj:'⚗️ Chemistry',room:'Lab 1'},{time:'10:20–11:20',subj:'📖 English',room:'Room 2'},{time:'11:30–12:30',subj:'📐 Maths',room:'Room 3'}],
+    Thursday: [{time:'8:00–9:00',subj:'📖 English',room:'Room 2'},{time:'9:10–10:10',subj:'⚡ Physics',room:'Room 5'},{time:'10:20–11:20',subj:'📐 Maths',room:'Room 3'},{time:'11:30–12:30',subj:'⚗️ Chemistry',room:'Lab 1'}],
+    Friday: [{time:'8:00–9:00',subj:'⚗️ Chemistry',room:'Lab 1'},{time:'9:10–10:10',subj:'📖 English',room:'Room 2'},{time:'10:20–11:20',subj:'⚡ Physics',room:'Room 5'},{time:'11:30–12:30',subj:'📐 Maths',room:'Room 3'}],
+    Saturday: [{time:'8:00–9:00',subj:'📐 Maths',room:'Room 3'},{time:'9:10–10:10',subj:'⚗️ Chemistry',room:'Lab 1'}],
+  };
+  storeSet('timetable', tt);
+}
+function renderTimetable() {
+  const tt = storeGet('timetable') || {};
+  const days = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const today = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+  let html = '';
+  days.forEach(day => {
+    const isToday = day === today;
+    html += `<div class="tt-day"><div class="tt-day-label" style="${isToday?'color:var(--accent);':'color:var(--muted);'}">${isToday?'▶ ':''} ${day}${isToday?' (Today)':''}</div>`;
+    (tt[day]||[]).forEach(s => {
+      html += `<div class="tt-slot"><div class="tt-time">${s.time}</div><div class="tt-subj">${s.subj}</div><div class="tt-room">${s.room}</div></div>`;
+    });
+    html += `</div>`;
+  });
+  document.getElementById('ttContent').innerHTML = html || '<div class="empty-state"><p>No timetable data.</p></div>';
+}
+
+// ===== HOMEWORK =====
+function addHomework() {
+  const text = document.getElementById('hwText').value.trim();
+  const subj = document.getElementById('hwSubject').value;
+  if (!text) return;
+  const hw = storeGet('hw_' + currentUser.username) || [];
+  hw.unshift({ id: Date.now(), text, subj, done: false, ts: Date.now() });
+  storeSet('hw_' + currentUser.username, hw);
+  document.getElementById('hwText').value = '';
+  renderHomework();
+}
+function toggleHW(id) {
+  const hw = storeGet('hw_' + currentUser.username) || [];
+  const item = hw.find(h => h.id === id);
+  if (item) { item.done = !item.done; storeSet('hw_' + currentUser.username, hw); renderHomework(); }
+}
+function deleteHW(id) {
+  const hw = (storeGet('hw_' + currentUser.username) || []).filter(h => h.id !== id);
+  storeSet('hw_' + currentUser.username, hw);
+  renderHomework();
+}
+const subjEmoji = {chemistry:'⚗️',physics:'⚡',maths:'📐',english:'📖',other:'📌'};
+function renderHomework() {
+  const hw = storeGet('hw_' + currentUser.username) || [];
+  const list = document.getElementById('hwList');
+  if (!list) return;
+  if (!hw.length) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><p>No homework! Enjoy your free time.</p></div>`; return; }
+  list.innerHTML = hw.map(h => `<div class="hw-item">
+    <div class="hw-check ${h.done?'done':''}" onclick="toggleHW(${h.id})">${h.done?'✓':''}</div>
+    <div class="user-info"><div class="hw-text ${h.done?'done':''}">${h.text}</div><div class="hw-subject">${subjEmoji[h.subj]||'📌'} ${h.subj}</div></div>
+    <span class="hw-del" onclick="deleteHW(${h.id})">🗑️</span>
+  </div>`).join('');
+}
+
+// ===== SEATING =====
+const SEAT_ROWS = 5, SEAT_COLS = 5;
+function getSeatDay() {
+  const days = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+  const d = new Date();
+  const dayName = days[d.getDay()];
+  // Alternate starting Monday: odd days = set A, even days = set B (just group label)
+  const dayNum = Math.floor(d.getTime() / 86400000);
+  return { dayName, dayNum };
+}
+function renderSeating() {
+  const { dayName, dayNum } = getSeatDay();
+  const label = document.getElementById('seatDayLabel');
+  if (label) label.innerHTML = `📅 ${dayName} — Group ${dayNum % 2 === 0 ? 'A' : 'B'} (refreshes daily)`;
+  const seatKey = 'seats_' + dayNum;
+  let seats = storeGet(seatKey) || {};
+  const grid = document.getElementById('seatingGrid');
+  if (!grid) return;
+  let html = '';
+  for (let r = 0; r < SEAT_ROWS; r++) {
+    for (let c = 0; c < SEAT_COLS; c++) {
+      const sid = `${r}_${c}`;
+      const occupant = seats[sid];
+      const isMine = occupant === currentUser.username;
+      const isTaken = occupant && !isMine;
+      const users = storeGet('users') || {};
+      const occName = occupant ? (users[occupant]?.name?.split(' ')[0] || occupant) : '';
+      html += `<div class="seat ${isMine?'mine':''} ${isTaken?'taken':''}" onclick="claimSeat('${sid}')">
+        <span class="seat-icon">${isMine?'🟢':isTaken?'🟣':'⬛'}</span>
+        <span class="seat-name">${isMine?'You':occName}</span>
+        <span style="font-size:0.6rem;color:var(--muted);">R${r+1}C${c+1}</span>
+      </div>`;
+    }
+  }
+  grid.innerHTML = html;
+}
+function claimSeat(sid) {
+  const { dayNum } = getSeatDay();
+  const seatKey = 'seats_' + dayNum;
+  let seats = storeGet(seatKey) || {};
+  // Remove current user from any seat
+  Object.keys(seats).forEach(k => { if (seats[k] === currentUser.username) delete seats[k]; });
+  // If clicking own seat, just unclaim
+  if (seats[sid] === currentUser.username) { storeSet(seatKey, seats); renderSeating(); return; }
+  // If taken by someone else, show who
+  if (seats[sid]) { showToast('🟣 Seat taken by ' + (storeGet('users')||{})[seats[sid]]?.name); return; }
+  seats[sid] = currentUser.username;
+  storeSet(seatKey, seats);
+  renderSeating();
+}
+
+// ===== FRIENDS =====
+function showFriendsTab(tab) {
+  currentFriendsTab = tab;
+  document.querySelectorAll('#pageFriends .btn').forEach((b,i) => {
+    const tabs = ['friends','search','chats'];
+    b.className = `btn ${tabs[i]===tab?'btn-primary':'btn-ghost'}`;
+    b.style.flex='1'; b.style.padding='10px';
+  });
+  renderFriends();
+}
+function renderFriends() {
+  const content = document.getElementById('friendsTabContent');
+  if (!content) return;
+  if (currentFriendsTab === 'search') renderFriendSearch(content);
+  else if (currentFriendsTab === 'friends') renderFriendList(content);
+  else renderChatList(content);
+}
+function renderFriendSearch(content) {
+  const users = storeGet('users') || {};
+  const meData = users[currentUser.username] || {};
+  const friends = meData.friends || [];
+  const pendingOut = meData.pendingOut || [];
+  const pendingIn = meData.pendingIn || [];
+
+  let html = `<div class="search-bar"><span>🔍</span><input id="friendSearchInp" placeholder="Search people..." oninput="filterFriendSearch()" autofocus></div><div id="friendSearchResults">`;
+  Object.values(users).forEach(u => {
+    if (u.username === currentUser.username || u.suspended) return;
+    const isFriend = friends.includes(u.username);
+    const isPendingOut = pendingOut.includes(u.username);
+    const isPendingIn = pendingIn.includes(u.username);
+    let actionBtn = '';
+    if (isFriend) actionBtn = `<button class="user-action ua-friend" onclick="removeFriend('${u.username}')">Friends ✓</button>`;
+    else if (isPendingOut) actionBtn = `<button class="user-action ua-pending">Pending…</button>`;
+    else if (isPendingIn) actionBtn = `<button class="user-action ua-invite" onclick="acceptFriend('${u.username}')">Accept</button>`;
+    else actionBtn = `<button class="user-action ua-invite" onclick="inviteFriend('${u.username}')">+ Invite</button>`;
+    html += `<div class="user-list-item" data-name="${u.name.toLowerCase()} ${u.username.toLowerCase()}">
+      <div class="user-avatar">${u.pfp?`<img src="${u.pfp}">`:(u.name[0].toUpperCase())}</div>
+      <div class="user-info"><div class="user-name">${u.name} ${u.role==='admin'?'<span class="admin-badge">ADMIN</span>':''}</div><div class="user-status">@${u.username}</div></div>
+      ${actionBtn}
+    </div>`;
+  });
+  html += `</div>`;
+  content.innerHTML = html;
+}
+function filterFriendSearch() {
+  const q = document.getElementById('friendSearchInp').value.toLowerCase();
+  document.querySelectorAll('#friendSearchResults .user-list-item').forEach(el => {
+    el.style.display = el.dataset.name.includes(q) ? '' : 'none';
+  });
+}
+function inviteFriend(username) {
+  const users = storeGet('users') || {};
+  const me = users[currentUser.username];
+  const them = users[username];
+  if (!me || !them) return;
+  if (!me.pendingOut) me.pendingOut = [];
+  if (!them.pendingIn) them.pendingIn = [];
+  if (!me.pendingOut.includes(username)) me.pendingOut.push(username);
+  if (!them.pendingIn.includes(currentUser.username)) them.pendingIn.push(currentUser.username);
+  users[currentUser.username] = me;
+  users[username] = them;
+  storeSet('users', users);
+  currentUser = me;
+  renderFriends();
+}
+function acceptFriend(username) {
+  const users = storeGet('users') || {};
+  const me = users[currentUser.username];
+  const them = users[username];
+  me.friends = me.friends || [];
+  them.friends = them.friends || [];
+  if (!me.friends.includes(username)) me.friends.push(username);
+  if (!them.friends.includes(currentUser.username)) them.friends.push(currentUser.username);
+  me.pendingIn = (me.pendingIn||[]).filter(u=>u!==username);
+  them.pendingOut = (them.pendingOut||[]).filter(u=>u!==currentUser.username);
+  users[currentUser.username]=me; users[username]=them;
+  storeSet('users',users);
+  currentUser=me;
+  renderFriends();
+}
+function removeFriend(username) {
+  const users = storeGet('users')||{};
+  const me = users[currentUser.username];
+  const them = users[username];
+  me.friends=(me.friends||[]).filter(u=>u!==username);
+  if(them) them.friends=(them.friends||[]).filter(u=>u!==currentUser.username);
+  users[currentUser.username]=me; if(them) users[username]=them;
+  storeSet('users',users);
+  currentUser=me;
+  renderFriends();
+}
+function renderFriendList(content) {
+  const users = storeGet('users')||{};
+  const me = users[currentUser.username]||{};
+  const friends = me.friends||[];
+  const pendingIn = me.pendingIn||[];
+  let html = '';
+  if (pendingIn.length) {
+    html += `<div class="card"><div style="font-weight:600;margin-bottom:10px;font-size:0.9rem;">📨 Friend Requests</div>`;
+    pendingIn.forEach(u => {
+      const user = users[u];
+      if(!user) return;
+      html += `<div class="user-list-item">
+        <div class="user-avatar">${user.pfp?`<img src="${user.pfp}">`:(user.name[0].toUpperCase())}</div>
+        <div class="user-info"><div class="user-name">${user.name}</div><div class="user-status">@${user.username}</div></div>
+        <button class="user-action ua-invite" onclick="acceptFriend('${u}')">Accept</button>
+      </div>`;
+    });
+    html += `</div>`;
+  }
+  if (!friends.length) { html += `<div class="empty-state"><div class="empty-icon">👋</div><p>No friends yet.<br>Go to Find People to connect!</p></div>`; }
+  else {
+    friends.forEach(u => {
+      const user = users[u];
+      if(!user) return;
+      html += `<div class="user-list-item" onclick="openChat('${u}')">
+        <div class="user-avatar">${user.pfp?`<img src="${user.pfp}">`:(user.name[0].toUpperCase())}</div>
+        <div class="user-info"><div class="user-name">${user.name}</div><div class="user-status">@${user.username} · Tap to chat</div></div>
+        <span>💬</span>
+      </div>`;
+      // Check if they've shared notes with us
+      const sharedSubjects = ['chemistry','physics','maths','english'].filter(s => {
+        const shared = storeGet('noteShared_' + u) || [];
+        return shared.includes(currentUser.username);
+      });
+      if (sharedSubjects.length) {
+        html += `<div style="padding:6px 0 10px 56px;font-size:0.78rem;color:var(--accent);">
+          📚 Shared: ${sharedSubjects.map(s=>`<span onclick="viewSharedNotes('${u}','${s}')" style="cursor:pointer;text-decoration:underline;">${s}</span>`).join(', ')}
+        </div>`;
+      }
+    });
+  }
+  content.innerHTML = html;
+}
+function renderChatList(content) {
+  const users = storeGet('users')||{};
+  const me = users[currentUser.username]||{};
+  const friends = me.friends||[];
+  if (!friends.length) { content.innerHTML = `<div class="empty-state"><div class="empty-icon">💬</div><p>Add friends first to chat!</p></div>`; return; }
+  let html = '';
+  friends.forEach(u => {
+    const user = users[u];
+    if(!user) return;
+    const msgs = storeGet('chat_'+[currentUser.username,u].sort().join('_'))||[];
+    const last = msgs[msgs.length-1];
+    html += `<div class="chat-list-item" onclick="openChat('${u}')">
+      <div class="user-avatar">${user.pfp?`<img src="${user.pfp}">`:(user.name[0].toUpperCase())}</div>
+      <div class="user-info"><div class="user-name">${user.name}</div><div class="chat-preview">${last?last.text:'Start a conversation'}</div></div>
+      <div class="chat-time">${last?formatTime(last.ts):''}</div>
+    </div>`;
+  });
+  content.innerHTML = html;
+}
+function openChat(username) {
+  const users = storeGet('users')||{};
+  const partner = users[username];
+  chatPartner = username;
+  const chatKey = 'chat_'+[currentUser.username,username].sort().join('_');
+  openModal(`<div class="flex-row" style="margin-bottom:14px;">
+    <div class="user-avatar" style="width:36px;height:36px;font-size:0.85rem;">${partner.pfp?`<img src="${partner.pfp}">`:(partner.name[0].toUpperCase())}</div>
+    <div>
+      <div style="font-weight:700;">${partner.name}</div>
+      <div style="font-size:0.75rem;color:var(--muted);">@${username}</div>
+    </div>
+  </div>
+  <div class="chat-window">
+    <div class="chat-messages" id="chatMsgs">${renderChatMsgs(chatKey)}</div>
+    <div class="chat-input-row">
+      <input class="inp" id="chatInp" placeholder="Message…" style="padding:10px 14px;" onkeydown="if(event.key==='Enter')sendChatMsg('${chatKey}')">
+      <button class="btn btn-accent" style="padding:10px 16px;" onclick="sendChatMsg('${chatKey}')">➤</button>
+    </div>
+  </div>`);
+  const msgs = document.getElementById('chatMsgs');
+  if(msgs) msgs.scrollTop = msgs.scrollHeight;
+}
+function renderChatMsgs(chatKey) {
+  const msgs = storeGet(chatKey)||[];
+  if (!msgs.length) return `<div class="text-muted text-sm" style="text-align:center;padding:20px;">Say hello! 👋</div>`;
+  return msgs.map(m => `<div class="msg ${m.from===currentUser.username?'mine':'theirs'}">
+    ${m.text}
+    <div class="msg-time">${formatTime(m.ts)}</div>
+  </div>`).join('');
+}
+function sendChatMsg(chatKey) {
+  const inp = document.getElementById('chatInp');
+  if(!inp||!inp.value.trim()) return;
+  const msgs = storeGet(chatKey)||[];
+  msgs.push({ from: currentUser.username, text: inp.value.trim(), ts: Date.now() });
+  storeSet(chatKey, msgs);
+  inp.value = '';
+  const chatMsgs = document.getElementById('chatMsgs');
+  if(chatMsgs) { chatMsgs.innerHTML = renderChatMsgs(chatKey); chatMsgs.scrollTop = chatMsgs.scrollHeight; }
+}
+function formatTime(ts) {
+  const d = new Date(ts);
+  return d.getHours()+':'+(d.getMinutes()+'').padStart(2,'0');
+}
+
+// ===== AI TUTOR =====
+async function sendAI() {
+  const inp = document.getElementById('aiInput');
+  const q = inp.value.trim();
+  if (!q) return;
+  inp.value = '';
+  const msgs = document.getElementById('aiMessages');
+
+  // Add user bubble
+  msgs.innerHTML += `<div style="background:rgba(124,58,237,0.2);border-radius:16px;border-bottom-right-radius:4px;padding:12px 14px;font-size:0.88rem;align-self:flex-end;max-width:85%;margin-left:auto;">${q}</div>`;
+
+  // Add thinking indicator
+  const thinkId = 'ai-think-'+Date.now();
+  msgs.innerHTML += `<div id="${thinkId}" class="ai-thinking"><div class="dot"></div><div class="dot"></div><div class="dot"></div> Thinking...</div>`;
+  msgs.scrollTop = msgs.scrollHeight;
+
+  try {
+    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: 'claude-sonnet-4-6',
+        max_tokens: 1000,
+        system: 'You are a friendly, expert AI tutor for high school students. You help with Chemistry, Physics, Maths, and English. Be concise, clear, and encouraging. Use emojis occasionally. Format math and chemistry formulas simply.',
+        messages: [{ role: 'user', content: q }]
+      })
+    });
+    const data = await resp.json();
+    const answer = data.content?.[0]?.text || 'Sorry, I could not get an answer. Please try again.';
+    document.getElementById(thinkId).remove();
+    msgs.innerHTML += `<div class="ai-bubble">${answer.replace(/\n/g,'<br>')}</div>`;
+  } catch(e) {
+    document.getElementById(thinkId).remove();
+    msgs.innerHTML += `<div class="ai-bubble" style="border-color:var(--danger);">⚠️ Connection error. Please check your internet and try again.</div>`;
+  }
+  msgs.scrollTop = msgs.scrollHeight;
+}
+document.addEventListener('DOMContentLoaded', () => {
+  const ai = document.getElementById('aiInput');
+  if(ai) ai.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendAI();} });
+});
+
+// ===== ANNOUNCEMENTS =====
+function renderAnnouncements() {
+  const isAdmin = currentUser.role === 'admin';
+  const panel = document.getElementById('announceAdminPanel');
+  const list = document.getElementById('announceList');
+  if (!panel || !list) return;
+  if (isAdmin) {
+    panel.innerHTML = `<div class="card"><div style="font-weight:700;color:var(--accent3);margin-bottom:12px;">📢 Post Announcement</div>
+      <input class="inp" id="annTitle" placeholder="Title" style="margin-bottom:10px;">
+      <textarea class="inp" id="annBody" placeholder="Write your announcement..." rows="3" style="margin-bottom:10px;"></textarea>
+      <button class="btn btn-accent w-full" onclick="postAnn()">Post</button>
+    </div>`;
+  } else panel.innerHTML = '';
+  const anns = storeGet('announcements') || [];
+  if (!anns.length) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">📢</div><p>No announcements yet.</p></div>`; return; }
+  list.innerHTML = anns.slice().reverse().map((a,i) => `<div class="ann-item">
+    <div class="ann-title">${a.title}</div>
+    <div class="ann-body">${a.body}</div>
+    <div class="ann-meta">Posted by ${a.by} · ${new Date(a.ts).toLocaleDateString()}
+    ${isAdmin?` <span onclick="deleteAnn(${anns.length-1-i})" style="color:var(--danger);cursor:pointer;margin-left:10px;">Delete</span>`:''}</div>
+  </div>`).join('');
+}
+function postAnn() {
+  const title = document.getElementById('annTitle').value.trim();
+  const body = document.getElementById('annBody').value.trim();
+  if (!title || !body) return;
+  const anns = storeGet('announcements') || [];
+  anns.push({ title, body, by: currentUser.name, ts: Date.now() });
+  storeSet('announcements', anns);
+  document.getElementById('annTitle').value = '';
+  document.getElementById('annBody').value = '';
+  renderAnnouncements();
+}
+function deleteAnn(idx) {
+  const anns = storeGet('announcements') || [];
+  anns.splice(idx, 1);
+  storeSet('announcements', anns);
+  renderAnnouncements();
+}
+
+// ===== PROFILE =====
+function renderProfile() {
+  const users = storeGet('users') || {};
+  const me = users[currentUser.username] || currentUser;
+  currentUser = me;
+  const pfpBig = document.getElementById('profilePfpBig');
+  if (me.pfp) pfpBig.innerHTML = `<img src="${me.pfp}">`;
+  else pfpBig.textContent = me.name[0].toUpperCase();
+  document.getElementById('profileNameDisplay').textContent = me.name;
+  document.getElementById('profileRoleDisplay').textContent = me.role === 'admin' ? '⚡ Admin' : '🎓 Student';
+  document.getElementById('pfName').innerHTML = `<span class="profile-field-label">Full Name</span><span class="profile-field-val">${me.name}</span>`;
+  document.getElementById('pfAge').innerHTML = `<span class="profile-field-label">Age</span><span class="profile-field-val">${me.age}</span>`;
+  document.getElementById('pfUsername').innerHTML = `<span class="profile-field-label">Username</span><span class="profile-field-val">@${me.username}</span>`;
+  document.getElementById('editAge').value = me.age;
+
+  // Admin panel
+  const adminPanel = document.getElementById('adminPanel');
+  if (me.role === 'admin') {
+    adminPanel.style.display = 'block';
+    let html = '';
+    Object.values(users).forEach(u => {
+      if (u.username === currentUser.username) return;
+      html += `<div class="user-list-item" onclick="openUserOptions('${u.username}')">
+        <div class="user-avatar">${u.pfp?`<img src="${u.pfp}">`:(u.name[0].toUpperCase())}</div>
+        <div class="user-info">
+          <div class="user-name">${u.name} ${u.role==='admin'?'<span class="admin-badge">ADMIN</span>':''} ${u.suspended?'<span class="badge badge-danger" style="background:rgba(239,68,68,0.2);color:#f87171;padding:2px 8px;border-radius:20px;font-size:0.65rem;">SUSPENDED</span>':''}</div>
+          <div class="user-status">@${u.username} · Age ${u.age}</div>
+        </div>
+        <span style="color:var(--muted);">›</span>
+      </div>`;
+    });
+    document.getElementById('adminUserList').innerHTML = html || '<div class="text-muted text-sm">No other users yet.</div>';
+  } else adminPanel.style.display = 'none';
+}
+
+function openUserOptions(username) {
+  const users = storeGet('users') || {};
+  const u = users[username];
+  openModal(`<div class="modal-title">👤 ${u.name}</div>
+    <div class="action-sheet-item" onclick="viewUserProfile('${username}')">👤 View Profile</div>
+    ${currentUser.role==='admin'?`
+    <div class="action-sheet-item" onclick="toggleAdmin('${username}')">${u.role==='admin'?'👤 Remove Admin':'⚡ Make Admin'}</div>
+    <div class="action-sheet-item" onclick="toggleSuspend('${username}')">${u.suspended?'✅ Unsuspend':'🚫 Suspend Account'}</div>
+    <div class="action-sheet-item danger" onclick="deleteUser('${username}')">🗑️ Delete Account</div>
+    `:''}
+  `);
+}
+function viewUserProfile(username) {
+  const users = storeGet('users') || {};
+  const u = users[username];
+  closeModalDirect();
+  openModal(`<div class="profile-header" style="padding:12px 0;">
+    <div class="profile-pfp" style="cursor:default;">${u.pfp?`<img src="${u.pfp}">`:(u.name[0].toUpperCase())}</div>
+    <div class="profile-name">${u.name}</div>
+    <div class="profile-role">${u.role==='admin'?'⚡ Admin':'🎓 Student'}</div>
+  </div>
+  <div class="profile-field"><span class="profile-field-label">Username</span><span>@${u.username}</span></div>
+  <div class="profile-field"><span class="profile-field-label">Age</span><span>${u.age}</span></div>
+  <div class="profile-field"><span class="profile-field-label">Member since</span><span>${new Date(u.joinedAt).toLocaleDateString()}</span></div>
+  `);
+}
+function toggleAdmin(username) {
+  const users = storeGet('users') || {};
+  users[username].role = users[username].role === 'admin' ? 'student' : 'admin';
+  storeSet('users', users);
+  closeModalDirect();
+  renderProfile();
+}
+function toggleSuspend(username) {
+  const users = storeGet('users') || {};
+  users[username].suspended = !users[username].suspended;
+  storeSet('users', users);
+  closeModalDirect();
+  renderProfile();
+}
+function deleteUser(username) {
+  if (!confirm('Delete this account? This cannot be undone.')) return;
+  const users = storeGet('users') || {};
+  delete users[username];
+  storeSet('users', users);
+  closeModalDirect();
+  renderProfile();
+}
+function saveProfile() {
+  const age = parseInt(document.getElementById('editAge').value);
+  if (!age) return;
+  const users = storeGet('users') || {};
+  users[currentUser.username].age = age;
+  storeSet('users', users);
+  currentUser = users[currentUser.username];
+  renderProfile();
+  showToast('Profile updated!');
+}
+function changePfp() { document.getElementById('pfpFileInput').click(); }
+function handlePfpUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = e => {
+    const users = storeGet('users') || {};
+    users[currentUser.username].pfp = e.target.result;
+    storeSet('users', users);
+    currentUser = users[currentUser.username];
+    renderProfile();
+    renderTopbar();
+    showToast('Profile photo updated!');
+  };
+  reader.readAsDataURL(file);
+  event.target.value = '';
+}
+
+// ===== MODAL =====
+function openModal(html) {
+  document.getElementById('modalBody').innerHTML = html;
+  document.getElementById('modalOverlay').classList.add('open');
+}
+function closeModal(e) { if (e.target === document.getElementById('modalOverlay')) closeModalDirect(); }
+function closeModalDirect() { document.getElementById('modalOverlay').classList.remove('open'); }
+
+// ===== TOAST =====
+function showToast(msg) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;bottom:90px;left:50%;transform:translateX(-50%);background:var(--accent);color:#0f0f1a;padding:10px 20px;border-radius:20px;font-size:0.85rem;font-weight:700;z-index:9999;transition:opacity 0.4s;';
+  t.textContent = msg;
+  document.body.appendChild(t);
+  setTimeout(() => { t.style.opacity='0'; setTimeout(()=>t.remove(),400); }, 2000);
+}
+
+// ===== BOOT =====
+init();
+</script>
+</body>
+</html>
