@@ -167,7 +167,16 @@ module.exports = async function handler(req, res) {
     } else if (anthropicKey) {
       result = await callAnthropic(payload, anthropicKey);
     } else {
-      return res.status(500).json({ error: { message: 'AI is not configured. Add GEMINI_API_KEY (or ANTHROPIC_API_KEY) in your Vercel project settings.' } });
+      return res.status(500).json({
+        error: { message: 'AI is not configured. Add GEMINI_API_KEY (or ANTHROPIC_API_KEY) in your Vercel project settings.' },
+        debug: {
+          commit: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null,
+          environment: process.env.VERCEL_ENV || null,
+          deployment: process.env.VERCEL_URL || null,
+          productionDomain: process.env.VERCEL_PROJECT_PRODUCTION_URL || null,
+          relevantVariables: Object.keys(process.env).filter(name => /GEMINI|GOOGLE|ANTHROPIC/i.test(name)).sort()
+        }
+      });
     }
   } catch (e) {
     return res.status(502).json({ error: { message: 'Could not reach the AI service. Please try again.' } });
