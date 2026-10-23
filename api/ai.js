@@ -8,6 +8,16 @@ function clampMaxTokens(value) {
   return Math.min(Math.max(n, 1), 4000);
 }
 
+function envKey(names) {
+  const normalize = name => String(name || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
+  const wanted = names.map(normalize);
+  for (const name of Object.keys(process.env)) {
+    if (!process.env[name]) continue;
+    if (wanted.includes(normalize(name))) return process.env[name].trim();
+  }
+  return '';
+}
+
 function errorMessage(data, fallback) {
   return (data && data.error && (data.error.message || data.error)) || fallback;
 }
@@ -134,9 +144,9 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: { message: 'A non-empty messages array is required.' } });
   }
 
-  const anthropicKey = process.env.ANTHROPIC_API_KEY;
-  const geminiKey = process.env.GEMINI_API_KEY;
-  const requested = String(process.env.AI_PROVIDER || '').toLowerCase();
+  const anthropicKey = envKey(['ANTHROPIC_API_KEY', 'ANTHROPIC_KEY']);
+  const geminiKey = envKey(['GEMINI_API_KEY', 'GEMINI_APIKEY', 'GEMINI_KEY', 'GOOGLE_GEMINI_API_KEY', 'GOOGLE_API_KEY']);
+  const requested = String(envKey(['AI_PROVIDER']) || '').toLowerCase();
 
   let result;
   try {
