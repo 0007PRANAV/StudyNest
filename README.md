@@ -16,11 +16,13 @@ The browser never holds an API key. AI requests go to `/api/ai`, which is implem
 ### Vercel
 
 1. Open the project in Vercel → **Settings** → **Environment Variables**.
-2. Add `ANTHROPIC_API_KEY` for Production, Preview, and Development.
+2. Add either key for Production, Preview, and Development:
+   - `GEMINI_API_KEY` — free tier available from [Google AI Studio](https://aistudio.google.com/apikey)
+   - `ANTHROPIC_API_KEY` — paid Anthropic key
 3. Redeploy the project.
-4. Optional: add `AI_MODEL` to override the default (`claude-sonnet-5-5`).
+4. Optional overrides: `GEMINI_MODEL` (default `gemini-3.8-flash`), `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`), or `AI_PROVIDER` (`gemini` / `anthropic`).
 
-Without the environment variable, `/api/ai` returns a clear "AI is not configured" error.
+Without either key, `/api/ai` returns a clear "AI is not configured" error.
 
 ### Cloudflare Workers
 
