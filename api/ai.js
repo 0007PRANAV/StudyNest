@@ -8,12 +8,14 @@ function clampMaxTokens(value) {
   return Math.min(Math.max(n, 1), 4000);
 }
 
-function envKey(names) {
+function envKey(names, fuzzy) {
   const normalize = name => String(name || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
   const wanted = names.map(normalize);
   for (const name of Object.keys(process.env)) {
-    if (!process.env[name]) continue;
-    if (wanted.includes(normalize(name))) return process.env[name].trim();
+    const value = process.env[name];
+    if (!value) continue;
+    const normalized = normalize(name);
+    if (wanted.includes(normalized) || (fuzzy && fuzzy(normalized))) return value.trim();
   }
   return '';
 }
@@ -144,8 +146,14 @@ module.exports = async function handler(req, res) {
     return res.status(400).json({ error: { message: 'A non-empty messages array is required.' } });
   }
 
-  const anthropicKey = envKey(['ANTHROPIC_API_KEY', 'ANTHROPIC_KEY']);
-  const geminiKey = envKey(['GEMINI_API_KEY', 'GEMINI_APIKEY', 'GEMINI_KEY', 'GOOGLE_GEMINI_API_KEY', 'GOOGLE_API_KEY']);
+  const anthropicKey = envKey(
+    ['ANTHROPIC_API_KEY', 'ANTHROPIC_KEY'],
+    name => name.includes('ANTHROPIC') && name.includes('KEY')
+  );
+  const geminiKey = envKey(
+    ['GEMINI_API_KEY', 'GEMINI_APIKEY', 'GEMINI_KEY', 'GOOGLE_GEMINI_API_KEY', 'GOOGLE_API_KEY'],
+    name => (name.includes('GEMINI') || name.includes('GOOGLE')) && name.includes('KEY')
+  );
   const requested = String(envKey(['AI_PROVIDER']) || '').toLowerCase();
 
   let result;
