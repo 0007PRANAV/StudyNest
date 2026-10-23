@@ -1,5 +1,6 @@
 const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
+const POLLINATIONS_URL = 'https://text.pollinations.ai/openai';
 const DEFAULT_ANTHROPIC_MODEL = 'claude-sonnet-5-5';
 const DEFAULT_GEMINI_MODEL = 'gemini-3.8-flash';
 
@@ -123,6 +124,62 @@ async function callGemini(payload, apiKey) {
   return { status: 200, body: { content: [{ type: 'text', text: answer }] } };
 }
 
+function toOpenAIMessages(payload) {
+  const messages = [];
+  if (payload.system) messages.push({ role: 'system', content: String(payload.system) });
+  for (const message of payload.messages) {
+    const role = message.role === 'assistant' ? 'assistant' : 'user';
+    if (typeof message.content === 'string') {
+      messages.push({ role, content: message.content });
+    } else if (Array.isArray(message.content)) {
+      const hasImage = message.content.some(block => block && (block.type === 'image' || (block.source && block.source.type === 'base64')));
+      if (hasImage) {
+        return { error: 'Image AI needs a Gemini or Anthropic API key. Add GEMINI_API_KEY in Vercel, then redeploy.' };
+      }
+      const text = message.content
+        .filter(block => block && block.type === 'text' && block.text)
+        .map(block => String(block.text))
+        .join('\n');
+      if (text) messages.push({ role, content: text });
+    }
+  }
+  return { messages };
+}
+
+async function callPollinations(payload) {
+  const converted = toOpenAIMessages(payload);
+  if (converted.error) {
+    return { status: 422, body: { error: { message: converted.error } } };
+  }
+
+  const upstream = await fetch(POLLINATIONS_URL, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      model: 'openai-fast',
+      messages: converted.messages,
+      max_tokens: clampMaxTokens(payload.max_tokens)
+    })
+  });
+  const text = await upstream.text();
+  let data = null;
+  try { data = text ? JSON.parse(text) : null; } catch (e) { data = null; }
+
+  if (!upstream.ok) {
+    const message = upstream.status === 402
+      ? 'Free AI is busy right now. Wait about 30 seconds and try again.'
+      : errorMessage(data, 'Free AI request failed (HTTP ' + upstream.status + ').');
+    return { status: upstream.status === 402 ? 429 : upstream.status, body: { error: { message } } };
+  }
+
+  let answer = data && data.choices && data.choices[0] && data.choices[0].message && data.choices[0].message.content;
+  if (typeof answer !== 'string') answer = text.trim();
+  if (!answer) {
+    return { status: 502, body: { error: { message: 'Free AI returned an empty response. Please try again.' } } };
+  }
+  return { status: 200, body: { content: [{ type: 'text', text: answer }], provider: 'pollinations' } };
+}
+
 module.exports = async function handler(req, res) {
   res.setHeader('access-control-allow-origin', '*');
   res.setHeader('access-control-allow-methods', 'POST, OPTIONS');
@@ -167,16 +224,7 @@ module.exports = async function handler(req, res) {
     } else if (anthropicKey) {
       result = await callAnthropic(payload, anthropicKey);
     } else {
-      return res.status(500).json({
-        error: { message: 'AI is not configured. Add GEMINI_API_KEY (or ANTHROPIC_API_KEY) in your Vercel project settings.' },
-        debug: {
-          commit: (process.env.VERCEL_GIT_COMMIT_SHA || '').slice(0, 7) || null,
-          environment: process.env.VERCEL_ENV || null,
-          deployment: process.env.VERCEL_URL || null,
-          productionDomain: process.env.VERCEL_PROJECT_PRODUCTION_URL || null,
-          relevantVariables: Object.keys(process.env).filter(name => /GEMINI|GOOGLE|ANTHROPIC/i.test(name)).sort()
-        }
-      });
+      result = await callPollinations(payload);
     }
   } catch (e) {
     return res.status(502).json({ error: { message: 'Could not reach the AI service. Please try again.' } });

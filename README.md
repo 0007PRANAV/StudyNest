@@ -22,7 +22,7 @@ The browser never holds an API key. AI requests go to `/api/ai`, which is implem
 3. Redeploy the project.
 4. Optional overrides: `GEMINI_MODEL` (default `gemini-3.8-flash`), `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`), or `AI_PROVIDER` (`gemini` / `anthropic`).
 
-Without either key, `/api/ai` returns a clear "AI is not configured" error.
+Without either key, text AI falls back to the free, rate-limited Pollinations API so the AI tutor still works. Image-based AI tools require `GEMINI_API_KEY` or `ANTHROPIC_API_KEY`.
 
 ### Cloudflare Workers
 
