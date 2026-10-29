@@ -2,6 +2,8 @@ const ANTHROPIC_URL = 'https://api.anthropic.com/v1/messages';
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
 const POLLINATIONS_URL = 'https://text.pollinations.ai/openai';
 const ANTHROPIC_MODELS = ['claude-sonnet-5-5', 'claude-haiku-5-5'];
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
+const OPENROUTER_MODELS = ['google/gemini-2.5-flash', 'openai/gpt-4o-mini'];
 const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3.8-flash'];
 
 const clampMaxTokens = v => Math.min(Math.max(parseInt(v, 10) || 1000, 1), 4000);
@@ -19,11 +21,16 @@ function envKey(E, names, fuzzy) {
   return '';
 }
 function getKeys(E) {
-  return {
-    anthropic: envKey(E, ['ANTHROPIC_API_KEY', 'ANTHROPIC_KEY'], n => n.includes('ANTHROPIC') && n.includes('KEY')),
-    gemini: envKey(E, ['GEMINI_API_KEY', 'GEMINI_KEY', 'GOOGLE_GEMINI_API_KEY', 'GOOGLE_API_KEY'], n => (n.includes('GEMINI') || n.includes('GOOGLE')) && n.includes('KEY')),
-    provider: String(envKey(E, ['AI_PROVIDER']) || '').toLowerCase()
-  };
+  const g = [], add = v => { v = cleanVal(v); if (v && !g.includes(v)) g.push(v); };
+  const A = envKey(E, ['ANTHROPIC_API_KEY', 'ANTHROPIC_KEY'], n => n.includes('ANTHROPIC') && n.includes('KEY'));
+  let anthropic = A, openrouter = envKey(E, ['OPENROUTER_API_KEY', 'OPENROUTER_KEY'], n => n.includes('OPENROUTER'));
+  for (const name of Object.keys(E || {})) {           // detect keys by name OR by their prefix, so odd variable names still work
+    const raw = E[name]; if (typeof raw !== 'string') continue; const v = cleanVal(raw), n = name.toUpperCase();
+    if (/^sk-ant-/.test(v)) anthropic = anthropic || v;
+    else if (/^sk-or-/.test(v)) openrouter = openrouter || v;
+    else if (/^(AIza|AQ\.)/.test(v) || ((n.includes('GEMINI') || n.includes('GOOGLE')) && n.includes('KEY') && v.length > 20)) add(v);
+  }
+  return { anthropic, gemini: g, openrouter, provider: String(envKey(E, ['AI_PROVIDER']) || '').toLowerCase() };
 }
 async function postJSON(url, headers, body) {
   const r = await fetch(url, { method: 'POST', headers: Object.assign({ 'content-type': 'application/json' }, headers), body: JSON.stringify(body) });
@@ -60,19 +67,50 @@ function toGeminiContents(messages) {
   }
   return contents;
 }
-async function callGemini(payload, key, E) {
+async function callGemini(payload, keys, E) {
   const models = E.GEMINI_MODEL || E.AI_MODEL ? [cleanVal(E.GEMINI_MODEL || E.AI_MODEL)] : GEMINI_MODELS;
   let last;
+  for (let ki = 0; ki < keys.length; ki++) {
+    for (const model of models) {
+      const body = { contents: toGeminiContents(payload.messages), generationConfig: { maxOutputTokens: clampMaxTokens(payload.max_tokens) } };
+      if (payload.system) body.system_instruction = { parts: [{ text: String(payload.system) }] };
+      const r = await postJSON(GEMINI_URL + encodeURIComponent(model) + ':generateContent', { 'x-goog-api-key': keys[ki] }, body);
+      const tag = 'Gemini key ' + (ki + 1) + ' (' + model + ')';
+      if (!r.ok) { last = { status: r.status, error: tag + ': ' + errMsg(r.data, 'HTTP ' + r.status) }; if (r.status !== 404) break; continue; }
+      const c = r.data && r.data.candidates && r.data.candidates[0];
+      const answer = ((c && c.content && c.content.parts) || []).filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('\n').trim();
+      if (answer) return { status: 200, body: { content: [{ type: 'text', text: answer }] } };
+      last = { status: 502, error: tag + ' returned no text (' + ((c && c.finishReason) || (r.data && r.data.promptFeedback && r.data.promptFeedback.blockReason) || 'empty') + ').' };
+      break;
+    }
+  }
+  return last;
+}
+
+async function callOpenRouter(payload, key, E) {
+  const models = E.OPENROUTER_MODEL ? [cleanVal(E.OPENROUTER_MODEL)] : OPENROUTER_MODELS;
+  const msgs = [];
+  if (payload.system) msgs.push({ role: 'system', content: String(payload.system) });
+  for (const m of payload.messages) {
+    const role = m.role === 'assistant' ? 'assistant' : 'user';
+    if (typeof m.content === 'string') { msgs.push({ role, content: m.content }); continue; }
+    if (!Array.isArray(m.content)) continue;
+    const parts = [];
+    for (const b of m.content) {
+      if (!b) continue;
+      if (b.type === 'text' && b.text) parts.push({ type: 'text', text: String(b.text) });
+      else if (b.type === 'image' && b.source && b.source.data) parts.push({ type: 'image_url', image_url: { url: 'data:' + (b.source.media_type || 'image/jpeg') + ';base64,' + b.source.data } });
+      else if (b.type === 'document' && b.source && b.source.data) parts.push({ type: 'file', file: { filename: 'document.pdf', file_data: 'data:application/pdf;base64,' + b.source.data } });
+    }
+    if (parts.length) msgs.push({ role, content: parts });
+  }
+  let last;
   for (const model of models) {
-    const body = { contents: toGeminiContents(payload.messages), generationConfig: { maxOutputTokens: clampMaxTokens(payload.max_tokens) } };
-    if (payload.system) body.system_instruction = { parts: [{ text: String(payload.system) }] };
-    const r = await postJSON(GEMINI_URL + encodeURIComponent(model) + ':generateContent', { 'x-goog-api-key': key }, body);
-    if (!r.ok) { last = { status: r.status, error: 'Gemini (' + model + '): ' + errMsg(r.data, 'HTTP ' + r.status) }; if (r.status !== 404) break; continue; }
-    const c = r.data && r.data.candidates && r.data.candidates[0];
-    const answer = ((c && c.content && c.content.parts) || []).filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('\n').trim();
-    if (answer) return { status: 200, body: { content: [{ type: 'text', text: answer }] } };
-    const why = (c && c.finishReason) || (r.data && r.data.promptFeedback && r.data.promptFeedback.blockReason) || 'empty response';
-    return { status: 502, error: 'Gemini (' + model + ') returned no text (' + why + ').' };
+    const r = await postJSON(OPENROUTER_URL, { authorization: 'Bearer ' + key, 'x-title': 'StudyNest' }, { model, messages: msgs, max_tokens: clampMaxTokens(payload.max_tokens) });
+    const a = r.data && r.data.choices && r.data.choices[0] && r.data.choices[0].message && r.data.choices[0].message.content;
+    if (r.ok && typeof a === 'string' && a.trim()) return { status: 200, body: { content: [{ type: 'text', text: a.trim() }] } };
+    last = { status: r.ok ? 502 : r.status, error: 'OpenRouter (' + model + '): ' + (r.ok ? 'empty response' : errMsg(r.data, 'HTTP ' + r.status)) };
+    if (![400, 404].includes(r.status)) break;
   }
   return last;
 }
@@ -97,20 +135,22 @@ async function callPollinations(payload) {
 
 // Tries every configured provider in order; returns first success, otherwise all the errors.
 async function route(payload, E) {
-  const k = getKeys(E), tries = [];
-  const add = (name, fn) => tries.push({ name, fn });
-  const A = () => add('anthropic', () => callAnthropic(payload, k.anthropic, E)), G = () => add('gemini', () => callGemini(payload, k.gemini, E));
-  if (k.provider === 'gemini') { if (k.gemini) G(); if (k.anthropic) A(); } else { if (k.anthropic) A(); if (k.gemini) G(); }
+  const k = getKeys(E), tries = [], add = (n, fn) => tries.push({ name: n, fn });
+  const A = () => k.anthropic && add('anthropic', () => callAnthropic(payload, k.anthropic, E));
+  const G = () => k.gemini.length && add('gemini', () => callGemini(payload, k.gemini, E));
+  const O = () => k.openrouter && add('openrouter', () => callOpenRouter(payload, k.openrouter, E));
+  const order = { gemini: [G, A, O], openrouter: [O, G, A] }[k.provider] || [A, G, O];
+  order.forEach(f => f());
   add('free', () => callPollinations(payload));
   const errors = [];
   for (const t of tries) {
     try { const r = await t.fn(); if (r && r.status === 200) return r; if (r) errors.push(r.error); } catch (e) { errors.push(t.name + ': could not reach the service'); }
   }
   const real = errors.filter(Boolean);
-  if (!k.anthropic && !k.gemini) real.unshift('No Anthropic or Gemini key reached the server, so images, PDFs and the full AI are off. Add ANTHROPIC_API_KEY or GEMINI_API_KEY in Vercel > Settings > Environment Variables (tick Production), then Redeploy. GitHub secrets do not count. Open /api/ai on your site to check.');
+  if (!k.anthropic && !k.gemini.length && !k.openrouter) real.unshift('No AI key reached the server. Add GEMINI_API_KEY, ANTHROPIC_API_KEY or an OpenRouter key in Vercel > Settings > Environment Variables (tick Production), then Redeploy. GitHub secrets do not count. Open /api/ai on your site to check.');
   return { status: 502, body: { error: { message: real.join(' | ') || 'AI request failed.' } } };
 }
-function diag(E) { const k = getKeys(E); return { anthropic_key_found: !!k.anthropic, gemini_key_found: !!k.gemini, provider_override: k.provider || null, env_names_seen: Object.keys(E || {}).filter(n => typeof E[n] === 'string' && /KEY|MODEL|PROVIDER/i.test(n)) }; }
+function diag(E) { const k = getKeys(E); return { anthropic_key_found: !!k.anthropic, gemini_keys_found: k.gemini.length, openrouter_key_found: !!k.openrouter, provider_override: k.provider || null }; }
 function validate(payload) {
   if (!payload || typeof payload !== 'object') return 'Invalid JSON body.';
   if (!Array.isArray(payload.messages) || !payload.messages.length) return 'A non-empty messages array is required.';
