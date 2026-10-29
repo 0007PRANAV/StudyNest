@@ -160,6 +160,15 @@ async function route(payload, E) {
   return { status: 502, body: { error: { message: real.join(' | ') || 'AI request failed.' } } };
 }
 function diag(E) { const k = getKeys(E); return { anthropic_key_found: !!k.anthropic, gemini_keys_found: k.gemini.length, openrouter_key_found: !!k.openrouter, provider_override: k.provider || null }; }
+async function selfTest(E) {
+  const k = getKeys(E), probe = { messages: [{ role: 'user', content: 'Reply with the single word OK.' }], max_tokens: 8 }, out = {};
+  const run = async (name, fn) => { try { const r = await fn(); out[name] = r && r.status === 200 ? 'WORKS' : 'FAILED: ' + (r && r.error); } catch (e) { out[name] = 'FAILED: could not reach the service'; } };
+  for (let i = 0; i < k.gemini.length; i++) await run('gemini_key_' + (i + 1) + ' (' + k.gemini[i].slice(0, 4) + '…)', () => callGemini(probe, [k.gemini[i]], E));
+  if (k.openrouter) await run('openrouter', () => callOpenRouter(probe, k.openrouter, E));
+  if (k.anthropic) await run('anthropic', () => callAnthropic(probe, k.anthropic, E));
+  if (!Object.keys(out).length) out.result = 'No keys found on the server.';
+  return out;
+}
 function validate(payload) {
   if (!payload || typeof payload !== 'object') return 'Invalid JSON body.';
   if (!Array.isArray(payload.messages) || !payload.messages.length) return 'A non-empty messages array is required.';
@@ -172,7 +181,7 @@ module.exports = async function handler(req, res) {
   res.setHeader('access-control-allow-headers', 'content-type');
   res.setHeader('cache-control', 'no-store');
   if (req.method === 'OPTIONS') return res.status(204).end();
-  if (req.method === 'GET') return res.status(200).json(diag(process.env));
+  if (req.method === 'GET') return res.status(200).json(/[?&]test=1/.test(req.url || '') ? Object.assign(diag(process.env), { test: await selfTest(process.env) }) : diag(process.env));
   if (req.method !== 'POST') return res.status(405).json({ error: { message: 'Use POST for this endpoint.' } });
   let payload = req.body;
   if (typeof payload === 'string') { try { payload = JSON.parse(payload); } catch (e) { payload = null; } }

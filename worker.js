@@ -160,6 +160,15 @@ async function route(payload, E) {
   return { status: 502, body: { error: { message: real.join(' | ') || 'AI request failed.' } } };
 }
 function diag(E) { const k = getKeys(E); return { anthropic_key_found: !!k.anthropic, gemini_keys_found: k.gemini.length, openrouter_key_found: !!k.openrouter, provider_override: k.provider || null }; }
+async function selfTest(E) {
+  const k = getKeys(E), probe = { messages: [{ role: 'user', content: 'Reply with the single word OK.' }], max_tokens: 8 }, out = {};
+  const run = async (name, fn) => { try { const r = await fn(); out[name] = r && r.status === 200 ? 'WORKS' : 'FAILED: ' + (r && r.error); } catch (e) { out[name] = 'FAILED: could not reach the service'; } };
+  for (let i = 0; i < k.gemini.length; i++) await run('gemini_key_' + (i + 1) + ' (' + k.gemini[i].slice(0, 4) + '…)', () => callGemini(probe, [k.gemini[i]], E));
+  if (k.openrouter) await run('openrouter', () => callOpenRouter(probe, k.openrouter, E));
+  if (k.anthropic) await run('anthropic', () => callAnthropic(probe, k.anthropic, E));
+  if (!Object.keys(out).length) out.result = 'No keys found on the server.';
+  return out;
+}
 function validate(payload) {
   if (!payload || typeof payload !== 'object') return 'Invalid JSON body.';
   if (!Array.isArray(payload.messages) || !payload.messages.length) return 'A non-empty messages array is required.';
@@ -169,7 +178,7 @@ function validate(payload) {
 const J = (b, s, extra) => new Response(JSON.stringify(b), { status: s || 200, headers: Object.assign({ 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' }, extra) });
 async function handleAI(request, env) {
   if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' } });
-  if (request.method === 'GET') return J(diag(env));
+  if (request.method === 'GET') return J(new URL(request.url).searchParams.get('test') === '1' ? Object.assign(diag(env), { test: await selfTest(env) }) : diag(env));
   if (request.method !== 'POST') return J({ error: { message: 'Use POST for this endpoint.' } }, 405);
   let payload; try { payload = await request.json(); } catch (e) { payload = null; }
   const bad = validate(payload);
