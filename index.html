@@ -279,6 +279,24 @@
   .ai-tbl th, .ai-tbl td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; } .ai-tbl th { background: rgba(255,255,255,.06); }
   .ai-think { margin-bottom: 8px; font-size: .75rem; color: var(--muted); } .ai-think summary { cursor: pointer; user-select: none; }
   .ai-think ol { margin: 6px 0 0; padding-left: 20px; } .ai-think li span { color: var(--accent); margin-left: 6px; }
+
+  /* Messages */
+  .chat-window { position: relative; }
+  .chat-day { align-self: center; background: rgba(255,255,255,.08); padding: 3px 12px; border-radius: 10px; font-size: .7rem; color: var(--muted); margin: 4px 0; }
+  .msg { position: relative; word-break: break-word; }
+  .msg-more { position: absolute; top: 2px; right: 8px; opacity: .45; cursor: pointer; font-size: .85rem; }
+  .msg-quote { border-left: 3px solid var(--accent); background: rgba(0,0,0,.2); padding: 5px 8px; border-radius: 8px; margin-bottom: 6px; font-size: .76rem; }
+  .msg-fwd { font-size: .68rem; color: var(--muted); margin-bottom: 3px; font-style: italic; }
+  .msg-img { max-width: 100%; border-radius: 10px; display: block; margin-bottom: 4px; cursor: pointer; }
+  .msg-reacts { margin: 6px 0 0; } .msg-react { background: var(--surface); border: 1px solid var(--border); border-radius: 12px; padding: 1px 7px; font-size: .78rem; cursor: pointer; margin-right: 3px; }
+  .tick-read { color: #4fc3f7; }
+  .chat-sheet { position: absolute; inset: 0; background: rgba(0,0,0,.55); display: flex; align-items: flex-end; z-index: 5; border-radius: 12px; }
+  .chat-sheet > div { background: var(--surface); width: 100%; border-radius: 16px 16px 0 0; padding: 12px; max-height: 80%; overflow: auto; }
+  .chat-react-row { display: flex; justify-content: space-around; font-size: 1.6rem; padding-bottom: 10px; border-bottom: 1px solid var(--border); margin-bottom: 6px; } .chat-react-row span { cursor: pointer; }
+  .chat-opt { padding: 11px 8px; cursor: pointer; border-radius: 8px; font-size: .9rem; } .chat-opt:hover { background: rgba(255,255,255,.07); }
+  .chat-emoji { flex-wrap: wrap; gap: 4px; padding: 8px; border-top: 1px solid var(--border); max-height: 120px; overflow: auto; } .chat-emoji span { font-size: 1.4rem; cursor: pointer; padding: 2px 4px; }
+  .chat-bar { display: flex; justify-content: space-between; gap: 8px; align-items: center; background: rgba(0,0,0,.2); border-left: 3px solid var(--accent); padding: 6px 10px; border-radius: 8px; margin-top: 8px; font-size: .78rem; }
+  .unread-badge { background: var(--accent); color: #000; border-radius: 10px; min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: .7rem; font-weight: 700; padding: 0 6px; }
 </style>
 </head>
 <body>
@@ -1870,69 +1888,163 @@ function renderFriendList(content) {
   }
   content.innerHTML = html;
 }
+// ===== MESSAGES: WhatsApp/Instagram-style chat =====
+let chatKeyOpen = null, chatReply = null, chatEditId = null, chatSearch = '', chatLPt = null;
+const CHAT_EMOJIS = '😀 😂 🤣 😊 😍 🥰 😘 😎 🤔 😅 😭 😢 😡 🥳 🤯 😴 👍 👎 👏 🙏 💪 🔥 ✨ ❤️ 💯 🎉 📚 ✏️ 🧠 ⚗️ 🧪 📐 ✅ ❌ 👀 🙌 🤝 😬 😇 🤗'.split(' ');
+const chatKeyFor = u => 'chat_' + [currentUser.username, u].sort().join('_');
+const chatMe = () => currentUser.username;
+const chatVisible = a => (a || []).filter(m => !(m.deletedFor || []).includes(chatMe()));
+function chatDayLabel(ts) {
+  const d = new Date(ts), t = new Date(), y = new Date(Date.now() - 864e5);
+  return d.toDateString() === t.toDateString() ? 'Today' : d.toDateString() === y.toDateString() ? 'Yesterday' : d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+}
+function chatPreview(m) {
+  if (!m) return 'Start a conversation';
+  if (m.deleted) return '🚫 Message deleted';
+  return (m.from === chatMe() ? (m.read ? '✓✓ ' : '✓ ') : '') + (m.img ? '📷 ' + (m.text || 'Photo') : (m.text || ''));
+}
 function renderChatList(content) {
-  const users = storeGet('users')||{};
-  const me = users[currentUser.username]||{};
-  const friends = me.friends||[];
+  const users = storeGet('users') || {}, me = users[chatMe()] || {}, friends = me.friends || [];
   if (!friends.length) { content.innerHTML = `<div class="empty-state"><div class="empty-icon">💬</div><p>Add friends first to chat!</p></div>`; return; }
-  let html = '';
-  friends.forEach(u => {
-    const user = users[u];
-    if(!user) return;
-    const msgs = storeGet('chat_'+[currentUser.username,u].sort().join('_'))||[];
-    const last = msgs[msgs.length-1];
-    html += `<div class="chat-list-item" onclick="openChat('${u}')">
-      <div class="user-avatar">${user.pfp?`<img src="${user.pfp}">`:(user.name[0].toUpperCase())}</div>
-      <div class="user-info"><div class="user-name">${user.name}</div><div class="chat-preview">${last?last.text:'Start a conversation'}</div></div>
-      <div class="chat-time">${last?formatTime(last.ts):''}</div>
-    </div>`;
-  });
-  content.innerHTML = html;
+  const rows = friends.filter(u => users[u]).map(u => { const vis = chatVisible(storeGet(chatKeyFor(u))), last = vis[vis.length - 1]; return { u, user: users[u], last, unread: vis.filter(m => m.from !== chatMe() && !m.read && !m.deleted).length }; })
+    .sort((a, b) => ((b.last && b.last.ts) || 0) - ((a.last && a.last.ts) || 0));
+  content.innerHTML = rows.map(r => `<div class="chat-list-item" onclick="openChat('${r.u}')">
+      <div class="user-avatar">${r.user.pfp ? `<img src="${r.user.pfp}">` : escapeHtml(r.user.name[0].toUpperCase())}</div>
+      <div class="user-info"><div class="user-name">${escapeHtml(r.user.name)}</div><div class="chat-preview" style="${r.unread ? 'color:var(--text);font-weight:600;' : ''}">${escapeHtml(aiClip(chatPreview(r.last), 48))}</div></div>
+      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:4px;"><div class="chat-time">${r.last ? formatTime(r.last.ts) : ''}</div>${r.unread ? `<div class="unread-badge">${r.unread}</div>` : ''}</div>
+    </div>`).join('');
+}
+function chatSaveMsgs(k, msgs) { try { storeSet(k, msgs); return true; } catch (e) { showToast('Storage is full. Delete some chats or photos.'); return false; } }
+function chatMarkRead() {
+  const msgs = storeGet(chatKeyOpen) || []; let ch = false;
+  msgs.forEach(m => { if (m.from !== chatMe() && !m.read) { m.read = true; m.readTs = Date.now(); ch = true; } });
+  if (ch) chatSaveMsgs(chatKeyOpen, msgs);
 }
 function openChat(username) {
-  const users = storeGet('users')||{};
-  const partner = users[username];
-  chatPartner = username;
-  const chatKey = 'chat_'+[currentUser.username,username].sort().join('_');
-  openModal(`<div class="flex-row" style="margin-bottom:14px;">
-    <div class="user-avatar" style="width:36px;height:36px;font-size:0.85rem;">${partner.pfp?`<img src="${partner.pfp}">`:(partner.name[0].toUpperCase())}</div>
-    <div>
-      <div style="font-weight:700;">${partner.name}</div>
-      <div style="font-size:0.75rem;color:var(--muted);">@${username}</div>
-    </div>
+  const users = storeGet('users') || {}, partner = users[username]; if (!partner) return;
+  chatPartner = username; chatKeyOpen = chatKeyFor(username); chatReply = null; chatEditId = null; chatSearch = '';
+  chatMarkRead();
+  openModal(`<div class="flex-row" style="margin-bottom:10px;justify-content:space-between;">
+    <div class="flex-row"><div class="user-avatar" style="width:36px;height:36px;font-size:0.85rem;">${partner.pfp ? `<img src="${partner.pfp}">` : escapeHtml(partner.name[0].toUpperCase())}</div>
+    <div><div style="font-weight:700;">${escapeHtml(partner.name)}</div><div style="font-size:0.75rem;color:var(--muted);">@${escapeHtml(username)}</div></div></div>
+    <div style="display:flex;gap:6px;"><button class="ai-mini-btn" onclick="chatToggleSearch()">🔍</button><button class="ai-mini-btn" onclick="chatClear()">🧹</button></div>
   </div>
-  <div class="chat-window">
-    <div class="chat-messages" id="chatMsgs">${renderChatMsgs(chatKey)}</div>
+  <div class="chat-window" id="chatWin">
+    <input class="inp" id="chatSearchInp" placeholder="Search in this chat…" style="display:none;margin-bottom:8px;padding:8px 12px;" oninput="chatSearch=this.value;chatRefresh()">
+    <div class="chat-messages" id="chatMsgs">${renderChatMsgs(chatKeyOpen)}</div>
+    <div id="chatBar"></div>
+    <div id="chatEmoji" class="chat-emoji" style="display:none;">${CHAT_EMOJIS.map(e => `<span onclick="chatAddEmoji('${e}')">${e}</span>`).join('')}</div>
     <div class="chat-input-row">
-      <input class="inp" id="chatInp" placeholder="Message…" style="padding:10px 14px;" onkeydown="if(event.key==='Enter')sendChatMsg('${chatKey}')">
-      <button class="btn btn-accent" style="padding:10px 16px;" onclick="sendChatMsg('${chatKey}')">➤</button>
-    </div>
-  </div>`);
-  const msgs = document.getElementById('chatMsgs');
-  if(msgs) msgs.scrollTop = msgs.scrollHeight;
+      <button class="ai-tool-btn" style="width:40px;height:40px;" onclick="chatToggleEmoji()">😊</button>
+      <input class="inp" id="chatInp" placeholder="Message…" style="padding:10px 12px;" onkeydown="if(event.key==='Enter')sendChatMsg(chatKeyOpen)">
+      <button class="ai-tool-btn" style="width:40px;height:40px;" onclick="document.getElementById('chatFile').click()">📷</button>
+      <button class="btn btn-accent" style="padding:10px 16px;" onclick="sendChatMsg(chatKeyOpen)">➤</button>
+      <input type="file" id="chatFile" accept="image/*" style="display:none;" onchange="chatSendImage(this)">
+    </div></div>`);
+  const m = document.getElementById('chatMsgs'); if (m) m.scrollTop = m.scrollHeight;
 }
-function renderChatMsgs(chatKey) {
-  const msgs = storeGet(chatKey)||[];
-  if (!msgs.length) return `<div class="text-muted text-sm" style="text-align:center;padding:20px;">Say hello! 👋</div>`;
-  return msgs.map(m => `<div class="msg ${m.from===currentUser.username?'mine':'theirs'}">
-    ${m.text}
-    <div class="msg-time">${formatTime(m.ts)}</div>
-  </div>`).join('');
+function renderChatMsgs(k) {
+  const me = chatMe(), users = storeGet('users') || {}, q = chatSearch.toLowerCase();
+  const msgs = chatVisible(storeGet(k)).filter(m => !q || (m.text || '').toLowerCase().includes(q));
+  if (!msgs.length) return `<div class="text-muted text-sm" style="text-align:center;padding:20px;">${q ? 'No messages found' : 'Say hello! 👋'}</div>`;
+  let out = '', lastDay = '';
+  msgs.forEach(m => {
+    const day = new Date(m.ts).toDateString(); if (day !== lastDay) { lastDay = day; out += `<div class="chat-day">${chatDayLabel(m.ts)}</div>`; }
+    const mine = m.from === me, id = m.id;
+    let body;
+    if (m.deleted) body = `<i style="opacity:.65;">🚫 ${mine ? 'You deleted this message' : 'This message was deleted'}</i>`;
+    else {
+      body = (m.fwd ? '<div class="msg-fwd">↪ Forwarded</div>' : '')
+        + (m.replyTo ? `<div class="msg-quote"><b>${escapeHtml(m.replyTo.from === me ? 'You' : (m.replyTo.name || m.replyTo.from))}</b><br>${escapeHtml(aiClip(m.replyTo.text, 70))}</div>` : '')
+        + (m.img ? `<img class="msg-img" src="${m.img}" onclick="chatViewImg(this.src)">` : '') + (m.text ? `<div>${escapeHtml(m.text)}</div>` : '');
+    }
+    const reacts = Object.keys(m.reactions || {}).filter(e => m.reactions[e].length).map(e => `<span class="msg-react" onclick="chatReact('${id}','${e}')">${e}${m.reactions[e].length > 1 ? ' ' + m.reactions[e].length : ''}</span>`).join('');
+    const star = (m.starred || []).includes(me) ? '⭐ ' : '';
+    out += `<div class="msg ${mine ? 'mine' : 'theirs'}" ondblclick="chatReact('${id}','❤️')" oncontextmenu="chatMenu('${id}');return false;" ontouchstart="clearTimeout(chatLPt);chatLPt=setTimeout(()=>chatMenu('${id}'),450)" ontouchend="clearTimeout(chatLPt)" ontouchmove="clearTimeout(chatLPt)">
+      <span class="msg-more" onclick="chatMenu('${id}')">⋯</span>${body}
+      ${reacts ? `<div class="msg-reacts">${reacts}</div>` : ''}
+      <div class="msg-time">${star}${m.edited && !m.deleted ? 'edited · ' : ''}${formatTime(m.ts)}${mine && !m.deleted ? ` <span class="${m.read ? 'tick-read' : ''}">${m.read ? '✓✓' : '✓'}</span>` : ''}</div>
+    </div>`;
+  });
+  return out;
 }
-function sendChatMsg(chatKey) {
-  const inp = document.getElementById('chatInp');
-  if(!inp||!inp.value.trim()) return;
-  const msgs = storeGet(chatKey)||[];
-  msgs.push({ from: currentUser.username, text: inp.value.trim(), ts: Date.now() });
-  storeSet(chatKey, msgs);
-  inp.value = '';
-  const chatMsgs = document.getElementById('chatMsgs');
-  if(chatMsgs) { chatMsgs.innerHTML = renderChatMsgs(chatKey); chatMsgs.scrollTop = chatMsgs.scrollHeight; }
+function chatRefresh(stay) {
+  const el = document.getElementById('chatMsgs'); if (!el) return; const top = el.scrollTop;
+  el.innerHTML = renderChatMsgs(chatKeyOpen); el.scrollTop = stay ? top : el.scrollHeight;
 }
-function formatTime(ts) {
-  const d = new Date(ts);
-  return d.getHours()+':'+(d.getMinutes()+'').padStart(2,'0');
+function chatUpdate(id, fn) {
+  const msgs = storeGet(chatKeyOpen) || [], m = msgs.find(x => x.id === id); if (!m) return null;
+  fn(m); chatSaveMsgs(chatKeyOpen, msgs); return m;
 }
+function chatBar() {
+  const b = document.getElementById('chatBar'); if (!b) return;
+  const users = storeGet('users') || {};
+  b.innerHTML = chatEditId ? `<div class="chat-bar"><span>✏️ Editing message</span><b style="cursor:pointer;" onclick="chatEditId=null;document.getElementById('chatInp').value='';chatBar()">✕</b></div>`
+    : chatReply ? `<div class="chat-bar"><span><b>↩️ ${escapeHtml(chatReply.from === chatMe() ? 'You' : chatReply.name)}</b><br>${escapeHtml(aiClip(chatReply.text, 60))}</span><b style="cursor:pointer;" onclick="chatReply=null;chatBar()">✕</b></div>` : '';
+}
+function sendChatMsg(k, img) {
+  const inp = document.getElementById('chatInp'); if (!inp) return; const text = inp.value.trim(); if (!text && !img) return;
+  const msgs = storeGet(k) || [];
+  if (chatEditId) { const m = msgs.find(x => x.id === chatEditId); if (m && m.from === chatMe() && text) { m.text = text; m.edited = true; } chatEditId = null; }
+  else { const m = { id: uid(), from: chatMe(), text, ts: Date.now(), read: false }; if (chatReply) m.replyTo = chatReply; if (img) m.img = img; msgs.push(m); }
+  if (!chatSaveMsgs(k, msgs)) return;
+  inp.value = ''; chatReply = null; chatBar(); document.getElementById('chatEmoji').style.display = 'none'; chatRefresh();
+}
+async function chatSendImage(inp) {
+  const f = inp.files && inp.files[0]; inp.value = ''; if (!f || !f.type.startsWith('image/')) return;
+  try { const raw = await aiReadDataURL(f), small = await itemToAIDataURL({ img: raw }, 800, 0.7); sendChatMsg(chatKeyOpen, small || raw); } catch (e) { showToast('Could not send that photo'); }
+}
+function chatViewImg(src) { const w = window.open(); if (w) { w.document.write('<img src="' + src + '" style="max-width:100%;">'); } }
+function chatToggleEmoji() { const e = document.getElementById('chatEmoji'); e.style.display = e.style.display === 'none' ? 'flex' : 'none'; }
+function chatAddEmoji(e) { const i = document.getElementById('chatInp'); i.value += e; i.focus(); }
+function chatToggleSearch() { const i = document.getElementById('chatSearchInp'); const on = i.style.display === 'none'; i.style.display = on ? 'block' : 'none'; if (!on) { i.value = ''; chatSearch = ''; chatRefresh(); } else i.focus(); }
+function chatClear() {
+  if (!confirm('Clear this chat for you? The other person keeps their copy.')) return;
+  const msgs = storeGet(chatKeyOpen) || []; msgs.forEach(m => { (m.deletedFor = m.deletedFor || []).push(chatMe()); });
+  chatSaveMsgs(chatKeyOpen, msgs); chatRefresh();
+}
+function chatReact(id, emoji) {
+  chatUpdate(id, m => {
+    const r = m.reactions = m.reactions || {}, me = chatMe(), had = (r[emoji] || []).includes(me);
+    Object.keys(r).forEach(e => { r[e] = r[e].filter(u => u !== me); }); if (!had) r[emoji] = (r[emoji] || []).concat(me);
+  }); chatRefresh(true);
+}
+function chatCloseSheet() { const s = document.getElementById('chatSheet'); if (s) s.remove(); }
+function chatMenu(id) {
+  const m = (storeGet(chatKeyOpen) || []).find(x => x.id === id), win = document.getElementById('chatWin'); if (!m || !win) return; chatCloseSheet();
+  const mine = m.from === chatMe(), starred = (m.starred || []).includes(chatMe()), o = [];
+  if (!m.deleted) {
+    o.push(['↩️ Reply', 'reply']); if (m.text) o.push(['📋 Copy', 'copy']); o.push(['↪️ Forward', 'fwd']); o.push([starred ? '☆ Unstar' : '⭐ Star', 'star']);
+    if (mine && m.text) o.push(['✏️ Edit', 'edit']); o.push(['ℹ️ Info', 'info']);
+  }
+  o.push(['🗑️ Delete for me', 'delme']); if (mine && !m.deleted) o.push(['🗑️ Delete for everyone', 'delall']);
+  win.insertAdjacentHTML('beforeend', `<div class="chat-sheet" id="chatSheet" onclick="if(event.target===this)chatCloseSheet()"><div>
+    ${m.deleted ? '' : '<div class="chat-react-row">' + ['❤️', '😂', '😮', '😢', '👍', '🙏'].map(e => `<span onclick="chatReact('${id}','${e}');chatCloseSheet()">${e}</span>`).join('') + '</div>'}
+    ${o.map(x => `<div class="chat-opt" onclick="chatDo('${x[1]}','${id}')">${x[0]}</div>`).join('')}</div></div>`);
+}
+function chatDo(act, id) {
+  const m = (storeGet(chatKeyOpen) || []).find(x => x.id === id); if (!m) return;
+  if (act === 'fwd') {
+    const users = storeGet('users') || {}, fr = ((users[chatMe()] || {}).friends || []).filter(u => users[u]);
+    document.querySelector('#chatSheet > div').innerHTML = '<div style="font-weight:700;margin-bottom:6px;">Forward to…</div>' + (fr.map(u => `<div class="chat-opt" onclick="chatForward('${id}','${u}')">${escapeHtml(users[u].name)} <span style="color:var(--muted);font-size:.75rem;">@${escapeHtml(u)}</span></div>`).join('') || '<div class="chat-opt">No friends yet</div>');
+    return;
+  }
+  chatCloseSheet();
+  if (act === 'reply') { const users = storeGet('users') || {}; chatReply = { id, from: m.from, name: (users[m.from] || {}).name || m.from, text: m.text || '📷 Photo' }; chatEditId = null; chatBar(); document.getElementById('chatInp').focus(); }
+  else if (act === 'copy') { try { navigator.clipboard.writeText(m.text); showToast('Copied'); } catch (e) { showToast('Could not copy'); } }
+  else if (act === 'star') { chatUpdate(id, x => { const s = x.starred = x.starred || [], me = chatMe(); x.starred = s.includes(me) ? s.filter(u => u !== me) : s.concat(me); }); chatRefresh(true); }
+  else if (act === 'edit') { chatEditId = id; chatReply = null; chatBar(); const i = document.getElementById('chatInp'); i.value = m.text; i.focus(); }
+  else if (act === 'info') showToast('Sent ' + new Date(m.ts).toLocaleString() + (m.from === chatMe() ? (m.read ? ' · Read ' + new Date(m.readTs || m.ts).toLocaleTimeString() : ' · Delivered, not read yet') : ''));
+  else if (act === 'delme') { chatUpdate(id, x => { (x.deletedFor = x.deletedFor || []).push(chatMe()); }); chatRefresh(true); }
+  else if (act === 'delall') { if (!confirm('Delete this message for everyone?')) return; chatUpdate(id, x => { x.deleted = true; x.text = ''; delete x.img; delete x.replyTo; x.reactions = {}; }); chatRefresh(true); }
+}
+function chatForward(id, u) {
+  const m = (storeGet(chatKeyOpen) || []).find(x => x.id === id); if (!m) return; const k = chatKeyFor(u), msgs = storeGet(k) || [];
+  const n = { id: uid(), from: chatMe(), text: m.text || '', ts: Date.now(), read: false, fwd: true }; if (m.img) n.img = m.img; msgs.push(n);
+  if (chatSaveMsgs(k, msgs)) showToast('Forwarded'); chatCloseSheet();
+}
+window.addEventListener('storage', e => { if (chatKeyOpen && document.getElementById('chatMsgs') && e.key && e.key.endsWith(chatKeyOpen)) { chatMarkRead(); chatRefresh(true); } });
+function formatTime(ts) { const d = new Date(ts); return d.getHours() + ':' + (d.getMinutes() + '').padStart(2, '0'); }
 
 // ===== AI TUTOR v2: sees every section, makes changes, attachments, images, video =====
 const AI_SUBJECTS = ['chemistry','physics','maths','english'];
