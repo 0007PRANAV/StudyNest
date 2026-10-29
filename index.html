@@ -259,6 +259,26 @@
   .folder-thumb-empty { width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; background: var(--surface); font-size: 2.2rem; }
   .mb-12 { margin-bottom: 12px; }
   .pdf-progress { display: flex; align-items: center; gap: 8px; color: var(--muted); font-size: 0.82rem; margin-top: 10px; }
+
+  /* AI v2 */
+  .ai-user { background: rgba(124,58,237,0.2); border-radius: 16px; border-bottom-right-radius: 4px; padding: 12px 14px; font-size: 0.88rem; align-self: flex-end; max-width: 85%; margin-left: auto; word-break: break-word; }
+  .ai-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 5px 10px; font-size: 0.74rem; }
+  .ai-chip b { margin-left: 6px; color: var(--danger); cursor: pointer; }
+  .ai-tool-btn { width: 44px; height: 44px; border-radius: 12px; border: 1.5px solid var(--border); background: var(--surface); font-size: 1.15rem; cursor: pointer; flex-shrink: 0; }
+  .ai-tool-btn.on { border-color: var(--accent); background: rgba(0,245,200,0.15); }
+
+  .ai-md { font-size: 0.92rem; line-height: 1.65; }
+  .ai-md p { margin: 0 0 10px; } .ai-md > :last-child { margin-bottom: 0; }
+  .ai-md h3 { font-size: 1.02rem; margin: 14px 0 6px; } .ai-md h4 { font-size: .95rem; margin: 12px 0 4px; color: var(--accent); }
+  .ai-md ul, .ai-md ol { margin: 0 0 10px; padding-left: 22px; } .ai-md li { margin-bottom: 4px; }
+  .ai-md code { background: rgba(255,255,255,.08); padding: 1px 6px; border-radius: 6px; font-size: .85em; }
+  .ai-md pre { background: rgba(0,0,0,.35); padding: 12px; border-radius: 10px; overflow-x: auto; margin: 0 0 10px; } .ai-md pre code { background: none; padding: 0; }
+  .ai-md blockquote { border-left: 3px solid var(--accent); margin: 0 0 10px; padding: 4px 12px; color: var(--muted); }
+  .ai-md hr { border: 0; border-top: 1px solid var(--border); margin: 12px 0; }
+  .ai-tbl { overflow-x: auto; margin: 0 0 10px; } .ai-tbl table { border-collapse: collapse; width: 100%; font-size: .85rem; }
+  .ai-tbl th, .ai-tbl td { border: 1px solid var(--border); padding: 6px 10px; text-align: left; } .ai-tbl th { background: rgba(255,255,255,.06); }
+  .ai-think { margin-bottom: 8px; font-size: .75rem; color: var(--muted); } .ai-think summary { cursor: pointer; user-select: none; }
+  .ai-think ol { margin: 6px 0 0; padding-left: 20px; } .ai-think li span { color: var(--accent); margin-left: 6px; }
 </style>
 </head>
 <body>
@@ -384,12 +404,20 @@
 
   <!-- AI TUTOR -->
   <div class="page" id="pageAI">
-    <div class="section-title">🤖 AI Tutor</div>
-    <div id="aiMessages" style="display:flex;flex-direction:column;gap:10px;margin-bottom:14px;"></div>
+    <div class="flex-between"><div class="section-title" style="margin-bottom:0;">🤖 AI Tutor</div><button class="ai-mini-btn" onclick="aiClearChat()">🧹 New chat</button></div>
+    <div id="aiMessages" style="display:flex;flex-direction:column;gap:10px;margin:14px 0;"></div>
+    <div id="aiAttachBar" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
     <div class="card" style="margin-bottom:0;">
-      <textarea class="inp" id="aiInput" placeholder="Ask anything — chemistry, physics, maths, English..." rows="2" style="margin-bottom:10px;"></textarea>
-      <button class="btn btn-accent w-full" onclick="sendAI()">Ask AI ✨</button>
+      <textarea class="inp" id="aiInput" placeholder="Ask anything, or tell me to change your notes, homework, timetable…" rows="2" style="margin-bottom:10px;"></textarea>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button class="ai-tool-btn" title="Attach files" onclick="document.getElementById('aiFileInput').click()">📎</button>
+        <button class="ai-tool-btn" title="Attach from my notes" onclick="aiPickFromApp()">🗂️</button>
+        <button class="ai-tool-btn" id="aiBtnImg" title="Generate image" onclick="aiSetMode('image')">🎨</button>
+        <button class="ai-tool-btn" id="aiBtnVid" title="Generate video" onclick="aiSetMode('video')">🎬</button>
+        <button class="btn btn-accent" style="flex:1;" onclick="sendAI()">Send ✨</button>
+      </div>
     </div>
+    <input type="file" id="aiFileInput" multiple accept="image/*,application/pdf,text/*,.txt,.md,.csv,.json" style="display:none;" onchange="aiAddFiles(Array.from(this.files));this.value='';">
   </div>
 
   <!-- ANNOUNCEMENTS -->
@@ -788,7 +816,7 @@ function showPage(id, btn) {
   if (id === 'pageTimetable') renderTimetable();
   if (id === 'pageHomework') renderHomework();
   if (id === 'pageProfile') renderProfile();
-  if (id === 'pageAI') { const ai = document.getElementById('aiMessages'); if(!ai.children.length) ai.innerHTML = `<div class="ai-bubble">👋 Hello! I'm your AI Tutor. Ask me anything about Chemistry, Physics, Maths, English or any subject!</div>`; }
+  if (id === 'pageAI') aiOpen();
 }
 
 // ===== NOTES & QUESTION PAPERS (folder-based, shared engine) =====
@@ -1901,37 +1929,422 @@ function formatTime(ts) {
   return d.getHours()+':'+(d.getMinutes()+'').padStart(2,'0');
 }
 
-// ===== AI TUTOR =====
-async function sendAI() {
-  const inp = document.getElementById('aiInput');
-  const q = inp.value.trim();
-  if (!q) return;
-  inp.value = '';
-  const msgs = document.getElementById('aiMessages');
+// ===== AI TUTOR v2: sees every section, makes changes, attachments, images, video =====
+const AI_SUBJECTS = ['chemistry','physics','maths','english'];
+const AI_PAGE_IDS = {notes:'pageNotes',qp:'pageQP',timetable:'pageTimetable',homework:'pageHomework',seating:'pageSeating',friends:'pageFriends',announce:'pageAnnounce',profile:'pageProfile'};
+let aiHistory = [], aiPending = [], aiMode = 'chat', aiUndo = null, aiBusy = false;
+const aiImgs = {};
+const $id = x => document.getElementById(x);
+const aiClean = s => String(s == null ? '' : s).replace(/[<>]/g, '');
+const aiClip = (s, n) => String(s || '').replace(/\s+/g, ' ').slice(0, n);
 
-  // Add user bubble
-  msgs.innerHTML += `<div style="background:rgba(124,58,237,0.2);border-radius:16px;border-bottom-right-radius:4px;padding:12px 14px;font-size:0.88rem;align-self:flex-end;max-width:85%;margin-left:auto;">${escapeHtml(q)}</div>`;
-
-  // Add thinking indicator
-  const thinkId = 'ai-think-'+Date.now();
-  msgs.innerHTML += `<div id="${thinkId}" class="ai-thinking"><div class="dot"></div><div class="dot"></div><div class="dot"></div> Thinking...</div>`;
-  msgs.scrollTop = msgs.scrollHeight;
-
-  try {
-    const data = await callAI({
-      max_tokens: 1500,
-      system: 'You are a friendly, expert AI tutor for high school students. You help with Chemistry, Physics, Maths, and English. Be concise, clear, and encouraging. Use emojis occasionally. Format math and chemistry formulas simply.',
-      messages: [{ role: 'user', content: q }]
-    });
-    const answer = aiTextFrom(data) || 'Sorry, I could not get an answer. Please try again.';
-    document.getElementById(thinkId).remove();
-    msgs.innerHTML += `<div class="ai-bubble">${escapeHtml(answer)}</div>`;
-  } catch(e) {
-    document.getElementById(thinkId).remove();
-    msgs.innerHTML += `<div class="ai-bubble" style="border-color:var(--danger);">⚠️ ${escapeHtml(e.message || 'Connection error. Please try again.')}</div>`;
+const aiKey = () => 'aichat_' + currentUser.username;
+let aiLog = [], aiLoadedFor = null;
+function aiSave() { try { storeSet(aiKey(), { history: aiHistory.slice(-24), log: aiLog.slice(-60) }); } catch (e) {} }
+function aiOpen() {
+  if (aiLoadedFor !== currentUser.username) {
+    aiLoadedFor = currentUser.username; const d = storeGet(aiKey()) || {};
+    aiHistory = d.history || []; aiLog = d.log || []; aiPending = [];
+    $id('aiMessages').innerHTML = ''; aiLog.forEach(e => aiDraw(e, false)); aiBar();
+    const m = $id('aiMessages'); if (m.lastElementChild) setTimeout(() => m.lastElementChild.scrollIntoView({ block: 'end' }), 50);
   }
-  msgs.scrollTop = msgs.scrollHeight;
+  aiWelcome();
 }
+function aiWelcome() {
+  const m = $id('aiMessages'); if (!m || aiLog.length || $id('aiWelcomeBox')) return;
+  const qs = ['Summarize my notes', 'What homework is pending?', 'Quiz me from my notes', 'Plan my study week', 'Draw a diagram of the water cycle'];
+  m.insertAdjacentHTML('afterbegin', `<div id="aiWelcomeBox" class="ai-bubble"><div class="ai-md"><p><b>Hi ${escapeHtml(currentUser.name.split(' ')[0])}, I'm your StudyNest AI.</b></p><p>I can read your notes, question papers, timetable, homework, seats and announcements, and change them when you ask. Use 📎 to attach files, 🗂️ to attach a notes folder, 🎨 for images and 🎬 for videos.</p></div><div class="ai-action-row">${qs.map(x => `<button class="ai-mini-btn" onclick="aiQuick(this.textContent)">${x}</button>`).join('')}</div></div>`);
+}
+function aiQuick(t) { $id('aiInput').value = t; sendAI(); }
+const aiFmt = s => s < 10 ? s.toFixed(1) + 's' : Math.round(s) + 's';
+
+// ---- Markdown renderer (readable answers) ----
+function aiMd(src) {
+  const esc = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const inl = s => esc(s).replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/(^|[^*\w])\*([^*\s][^*]*?)\*(?!\w)/g, '$1<i>$2</i>');
+  const L = String(src).replace(/\r/g, '').split('\n'), out = [], bul = /^\s*([-*•])\s+/, num = /^\s*\d+[.)]\s+/; let i = 0, m;
+  while (i < L.length) {
+    const l = L[i];
+    if (/^```/.test(l)) { const b = []; i++; while (i < L.length && !/^```/.test(L[i])) b.push(L[i++]); i++; out.push('<pre><code>' + esc(b.join('\n')) + '</code></pre>'); continue; }
+    if ((m = l.match(/^(#{1,4})\s+(.*)/))) { const n = Math.min(m[1].length, 2) + 2; out.push('<h' + n + '>' + inl(m[2]) + '</h' + n + '>'); i++; continue; }
+    if (/^\s*\|.*\|\s*$/.test(l) && /^\s*\|?[\s:|-]+\|[\s:|-]*$/.test(L[i + 1] || '')) {
+      const cells = r => r.trim().replace(/^\||\|$/g, '').split('|').map(c => inl(c.trim())); const hd = cells(l); i += 2; const rows = [];
+      while (i < L.length && /^\s*\|/.test(L[i])) rows.push(cells(L[i++]));
+      out.push('<div class="ai-tbl"><table><thead><tr>' + hd.map(c => '<th>' + c + '</th>').join('') + '</tr></thead><tbody>' + rows.map(r => '<tr>' + r.map(c => '<td>' + c + '</td>').join('') + '</tr>').join('') + '</tbody></table></div>'); continue;
+    }
+    if (bul.test(l)) { const it = []; while (i < L.length && bul.test(L[i])) it.push('<li>' + inl(L[i++].replace(bul, '')) + '</li>'); out.push('<ul>' + it.join('') + '</ul>'); continue; }
+    if (num.test(l)) { const it = []; while (i < L.length && num.test(L[i])) it.push('<li>' + inl(L[i++].replace(num, '')) + '</li>'); out.push('<ol>' + it.join('') + '</ol>'); continue; }
+    if (/^>\s?/.test(l)) { const b = []; while (i < L.length && /^>\s?/.test(L[i])) b.push(L[i++].replace(/^>\s?/, '')); out.push('<blockquote>' + inl(b.join(' ')) + '</blockquote>'); continue; }
+    if (/^\s*(---+|\*\*\*+)\s*$/.test(l)) { out.push('<hr>'); i++; continue; }
+    if (!l.trim()) { i++; continue; }
+    const p = [l]; i++;
+    while (i < L.length && L[i].trim() && !/^(#{1,4}\s|```|>|\s*\|)/.test(L[i]) && !bul.test(L[i]) && !num.test(L[i])) p.push(L[i++]);
+    out.push('<p>' + p.map(inl).join('<br>') + '</p>');
+  }
+  return out.join('');
+}
+
+// ---- Chat log: draw + persist ----
+function aiDraw(e, live) {
+  const m = $id('aiMessages'), w = $id('aiWelcomeBox'); if (w) w.remove();
+  const el = document.createElement('div');
+  if (e.k === 'user') {
+    el.className = 'ai-user'; el.innerHTML = escapeHtml(e.text || '') + ((e.files || []).length ? '<div style="margin-top:6px;font-size:.72rem;color:var(--muted);">📎 ' + escapeHtml(e.files.join(', ')) + '</div>' : '');
+  } else if (e.k === 'ai') {
+    el.className = 'ai-bubble';
+    const mt = e.meta; el.innerHTML = (mt ? `<details class="ai-think"><summary>⏱ Thought for ${aiFmt(mt.total)}</summary><ol>${mt.steps.map(s => `<li>${escapeHtml(s[0])} <span>${aiFmt(s[1])}</span></li>`).join('')}</ol></details>` : '') + '<div class="ai-md">' + aiMd(e.text) + '</div>';
+  } else if (e.k === 'applied') {
+    el.className = 'ai-bubble'; el.style.borderLeftColor = 'var(--success)';
+    el.innerHTML = '<div class="ai-result-label">Applied to your app</div>' + e.items.map(d => '<div>' + escapeHtml(d) + '</div>').join('') + (live && aiUndo ? '<div class="ai-action-row"><button class="ai-mini-btn" onclick="aiUndoLast(this)">↩️ Undo</button></div>' : '');
+  } else if (e.k === 'image') {
+    const id = 'img' + uid(); aiImgs[id] = { url: e.url, prompt: e.prompt, e }; el.className = 'ai-bubble';
+    el.innerHTML = `<div style="color:var(--muted);font-size:.78rem;margin-bottom:8px;">🎨 ${escapeHtml(aiClip(e.prompt, 120))}</div>
+    <div id="${id}_ph" class="ai-thinking"></div><img id="${id}" style="display:none;width:100%;border-radius:12px;" alt="">
+    <div class="ai-action-row" id="${id}_b" style="display:none;"><button class="ai-mini-btn" onclick="aiImgDownload('${id}')">⬇️ Download</button><button class="ai-mini-btn" onclick="aiImgToNotes('${id}')">📓 Save to Notes</button><button class="ai-mini-btn" onclick="aiImgRetry('${id}')">🔄 Another</button></div>`;
+    m.appendChild(el); aiLoadImg(id); return el;
+  } else if (e.k === 'video') {
+    el.className = 'ai-bubble'; el.innerHTML = '<div class="ai-md"><p>🎬 <b>' + escapeHtml(e.title || 'Video') + '</b></p><p style="color:var(--muted)">Videos are not kept after you leave. Ask again to regenerate it.</p></div>';
+  } else { el.className = 'ai-bubble'; el.style.borderColor = 'var(--danger)'; el.innerHTML = '⚠️ ' + escapeHtml(e.text || 'Error'); }
+  m.appendChild(el); if (live) el.scrollIntoView({ block: 'end' }); return el;
+}
+function aiPush(e) { aiLog.push(e); aiSave(); return aiDraw(e, true); }
+function aiClearChat() {
+  if ((aiLog.length || aiHistory.length) && !confirm('Start a new chat? This clears the saved conversation.')) return;
+  aiHistory = []; aiPending = []; aiLog = []; aiSave(); $id('aiMessages').innerHTML = ''; aiBar(); aiWelcome();
+}
+
+// ---- Snapshot of every section (sent to the AI with each message) ----
+function aiSnapshot() {
+  const u = currentUser, L = [];
+  L.push(`USER: ${u.name} (@${u.username}), role=${u.role || 'student'}, age=${u.age || '?'}. Today: ${new Date().toDateString()}.`);
+  ['notes', 'qp'].forEach(kind => {
+    L.push(kind === 'qp' ? 'QUESTION PAPERS (kind=qp):' : 'NOTES (kind=notes):');
+    AI_SUBJECTS.forEach(s => {
+      const fs = getFolders(kind, s);
+      if (!fs.length) { L.push(` ${s}: no folders`); return; }
+      fs.forEach(f => {
+        L.push(` ${s} > folder "${f.name}" (${f.images.length} files)`);
+        f.images.forEach((it, i) => {
+          const extra = it.text ? ` text:"${aiClip(it.text, 400)}"` : (it.aiSummary ? ` summary:"${aiClip(it.aiSummary, 300)}"` : (it.aiHandwriting ? ` transcript:"${aiClip(it.aiHandwriting, 300)}"` : ''));
+          L.push(`   #${i} "${it.label || it.name || 'file'}" ${itemType(it)}${it.important ? ' ⭐' : ''}${extra}`);
+        });
+      });
+    });
+  });
+  L.push('TIMETABLE: ' + JSON.stringify(storeGet('timetable') || {}));
+  const hw = storeGet('hw_' + u.username) || [];
+  L.push('HOMEWORK: ' + (hw.length ? hw.map(h => `[id=${h.id}] ${h.subj}: ${aiClip(h.text, 120)} ${h.done ? '(done)' : '(pending)'}`).join(' | ') : 'none'));
+  const users = storeGet('users') || {};
+  const seats = storeGet('seats_' + getSeatDay().dayNum) || {};
+  const mine = Object.keys(seats).find(k => seats[k] === u.username);
+  L.push(`SEATING today: ${Object.keys(seats).length} of ${SEAT_ROWS * SEAT_COLS} taken; your seat: ${mine ? 'R' + (+mine.split('_')[0] + 1) + 'C' + (+mine.split('_')[1] + 1) : 'none'}`);
+  const anns = (storeGet('announcements') || []).slice(-5);
+  L.push('ANNOUNCEMENTS: ' + (anns.length ? anns.map(a => `"${aiClip(a.title, 60)}": ${aiClip(a.body, 160)}`).join(' | ') : 'none'));
+  const me = users[u.username] || {};
+  L.push('FRIENDS: ' + ((me.friends || []).map(f => users[f] ? users[f].name : f).join(', ') || 'none'));
+  return L.join('\n').slice(0, 14000);
+}
+
+function aiSystem() {
+  return `You are StudyNest AI, the tutor built into the StudyNest student app. Write like a clear, calm teacher, not like a chatbot.
+FORMAT: answer first; no filler openers ("Great question!") or closers. Short paragraphs. Use ## headings only when an answer has several parts. Use numbered lists for steps and bullets for points, **bold** for key terms, and markdown tables for comparisons. Use plain notation for science and maths (H₂O, x², √, →). At most one emoji per reply. Explain simply first, then add detail.
+IMAGES: when the user asks for an image, picture, diagram, illustration, poster or says "show me", include a generate_image action with a detailed English prompt (style: clean educational illustration, labelled where useful) and say in one line what it shows.
+You CAN see the user's app data (APP DATA below) and any files attached to their message (images, PDFs, text). Never say you cannot view files or the app. If they mention a note whose file isn't attached, use the APP DATA text; if you need to actually see it, tell them to tap 🗂️ or 📎 and attach it.
+You can CHANGE the app. When (and only when) the user asks for a change, finish your reply with ONE line: <actions>[ ... ]</actions> containing a JSON array. The app runs it. Never claim a change happened without emitting actions. Allowed actions:
+{"type":"add_homework","subject":"chemistry|physics|maths|english|other","text":"..."}
+{"type":"set_homework_done","id":123,"done":true}
+{"type":"delete_homework","id":123}
+{"type":"set_timetable_day","day":"Monday","slots":[{"time":"8:00–9:00","subj":"⚗️ Chemistry","room":"Lab 1"}]}  (replaces that whole day)
+{"type":"create_folder","kind":"notes|qp","subject":"chemistry","name":"..."}
+{"type":"rename_folder","kind":"notes|qp","subject":"..","folder":"current name","name":"new name"}
+{"type":"label_item","kind":"notes|qp","subject":"..","folder":"folder name","idx":0,"label":"..."}
+{"type":"star_item","kind":"notes|qp","subject":"..","folder":"folder name","idx":0,"important":true}
+{"type":"save_note","kind":"notes|qp","subject":"..","folder":"folder name (created if missing)","title":"..","text":"full note text"}
+{"type":"post_announcement","title":"..","body":".."}  (admins only)
+{"type":"open","page":"notes|qp|timetable|homework|seating|friends|announce|profile","subject":"..","folder":".."}
+{"type":"generate_image","prompt":"detailed English image prompt"}
+{"type":"make_video","title":"..","scenes":[{"text":"caption (max 140 chars)","image_prompt":"detailed English image prompt"}]}  (4-6 scenes)
+Use ids/idx exactly as in APP DATA. You can't delete notes/files/folders; tell the user to do that with the 🗑️ buttons. For text notes, summaries and study material the user wants kept, use save_note.
+=== APP DATA ===
+${aiSnapshot()}`;
+}
+
+// ---- Attachments ----
+function aiBar() {
+  const b = $id('aiAttachBar'); if (!b) return;
+  b.innerHTML = aiPending.map((p, i) => `<span class="ai-chip">${p.kind === 'image' ? '🖼️' : p.kind === 'pdf' ? '📄' : '📝'} ${escapeHtml(aiClip(p.name, 22))} <b onclick="aiPending.splice(${i},1);aiBar()">✕</b></span>`).join('');
+}
+function aiReadDataURL(blob) {
+  return new Promise((res, rej) => { const r = new FileReader(); r.onload = e => res(e.target.result); r.onerror = () => rej(r.error); r.readAsDataURL(blob); });
+}
+async function aiAddFiles(files) {
+  for (const f of files) {
+    if (aiPending.length >= 6) { showToast('Max 6 attachments per message'); break; }
+    if (f.size > 12 * 1024 * 1024 || ((f.type === 'application/pdf' || /\.pdf$/i.test(f.name || '')) && f.size > 3 * 1024 * 1024)) { showToast((f.name || 'File') + ' is too big (PDFs max 3 MB, images 12 MB)'); continue; }
+    const name = f.name || 'file', t = f.type || '';
+    try {
+      if (t.startsWith('image/')) aiPending.push({ kind: 'image', name, data: await itemToAIDataURL({ img: await aiReadDataURL(f) }, 1600, 0.85) });
+      else if (t === 'application/pdf' || /\.pdf$/i.test(name)) aiPending.push({ kind: 'pdf', name, data: await aiReadDataURL(f) });
+      else if (t.startsWith('text/') || /\.(txt|md|csv|json)$/i.test(name)) aiPending.push({ kind: 'text', name, text: (await f.text()).slice(0, 20000) });
+      else showToast(name + ': use images, PDFs or text files');
+    } catch (e) { showToast('Could not read ' + name); }
+  }
+  aiBar();
+}
+async function aiAttachFolder(kind, subject, folder) {
+  let imgs = aiPending.filter(p => p.kind === 'image').length, n = 0;
+  for (const it of folder.images) {
+    if (aiPending.length >= 6) break;
+    const t = itemType(it), nm = (it.label || it.name || folder.name);
+    if (t.startsWith('image/') && imgs < 4) { const d = await itemToAIDataURL(it, 1400, 0.8); if (d) { aiPending.push({ kind: 'image', name: nm, data: d, auto: true, folder: folder.id }); imgs++; n++; } }
+    else if (t === 'application/pdf') { const b = await itemToBlob(it); if (b && b.size < 3 * 1024 * 1024) { aiPending.push({ kind: 'pdf', name: nm, data: await aiReadDataURL(b), auto: true, folder: folder.id }); n++; } else showToast(nm + ' is over 3 MB — skipped'); }
+    else if (it.text) { aiPending.push({ kind: 'text', name: nm, text: it.text, auto: true, folder: folder.id }); n++; }
+  }
+  aiBar(); return n;
+}
+function aiPickFromApp() {
+  let h = `<div class="modal-title">🗂️ Attach from your notes</div><div style="max-height:55vh;overflow:auto;display:flex;flex-direction:column;gap:8px;">`, any = false;
+  ['notes', 'qp'].forEach(kind => AI_SUBJECTS.forEach(s => getFolders(kind, s).forEach(f => {
+    any = true;
+    h += `<button class="btn btn-ghost" style="text-align:left;padding:10px 14px;" onclick="aiPickFolder('${kind}','${s}','${f.id}')">${kind === 'qp' ? '🗞️' : '📓'} ${escapeHtml(f.name)} <span style="color:var(--muted);font-size:.75rem;">· ${s} · ${f.images.length} files</span></button>`;
+  })));
+  openModal(any ? h + '</div>' : `<div class="modal-title">🗂️ Attach from your notes</div><p style="color:var(--muted)">No folders yet. Create one in Notes or Papers first.</p>`);
+}
+async function aiPickFolder(kind, subject, id) {
+  closeModalDirect();
+  const f = getFolders(kind, subject).find(x => x.id === id); if (!f) return;
+  showToast('Attaching…');
+  const n = await aiAttachFolder(kind, subject, f);
+  showToast(n ? `Attached ${n} file(s) from ${f.name}` : 'Nothing attachable in that folder');
+}
+function aiSetMode(m) {
+  aiMode = aiMode === m ? 'chat' : m;
+  $id('aiBtnImg').classList.toggle('on', aiMode === 'image');
+  $id('aiBtnVid').classList.toggle('on', aiMode === 'video');
+  $id('aiInput').placeholder = aiMode === 'image' ? '🎨 Describe the image to generate…' : aiMode === 'video' ? '🎬 What should the video explain?' : 'Ask anything, or tell me to change your notes, homework, timetable…';
+}
+function aiClearChat() { aiHistory = []; aiPending = []; $id('aiMessages').innerHTML = ''; aiBar(); aiWelcome(); }
+
+// ---- Actions ----
+function aiFindFolder(kind, subject, ref, create) {
+  kind = kind === 'qp' ? 'qp' : 'notes'; subject = AI_SUBJECTS.includes(subject) ? subject : currentSubject;
+  const fs = getFolders(kind, subject), r = String(ref || '').toLowerCase().trim();
+  let f = fs.find(x => x.id === ref) || fs.find(x => x.name.toLowerCase() === r) || (r && fs.find(x => x.name.toLowerCase().includes(r)));
+  if (!f && create && r) { f = { id: uid(), name: aiClean(ref).slice(0, 60), ts: Date.now(), images: [] }; fs.push(f); }
+  return { kind, subject, fs, f };
+}
+function aiGoto(page, a) {
+  const id = AI_PAGE_IDS[page]; if (!id) return;
+  if ((page === 'notes' || page === 'qp') && a) {
+    const kind = page, subject = AI_SUBJECTS.includes(a.subject) ? a.subject : getSubj(kind);
+    setSubj(kind, subject); openFolderCtx = null;
+    document.querySelectorAll('#' + tabsId(kind) + ' .subject-tab').forEach(t => t.classList.toggle('active', (t.getAttribute('onclick') || '').includes("'" + subject + "'")));
+    if (a.folder) { const r = aiFindFolder(kind, subject, a.folder); if (r.f) openFolderCtx = { kind, id: r.f.id }; }
+  }
+  const btn = document.querySelector('.nav-item[onclick*="' + id + '"]');
+  showPage(id, btn);
+}
+async function aiRun(a) {
+  const u = currentUser.username;
+  switch (a.type) {
+    case 'add_homework': {
+      const hw = storeGet('hw_' + u) || [];
+      hw.unshift({ id: Date.now() + Math.floor(Math.random() * 999), text: aiClean(a.text).slice(0, 500), subj: ['chemistry', 'physics', 'maths', 'english'].includes(a.subject) ? a.subject : 'other', done: false, ts: Date.now() });
+      storeSet('hw_' + u, hw); return '📝 Added homework: ' + aiClip(aiClean(a.text), 50);
+    }
+    case 'set_homework_done': {
+      const hw = storeGet('hw_' + u) || [], h = hw.find(x => String(x.id) === String(a.id)); if (!h) return null;
+      h.done = a.done !== false; storeSet('hw_' + u, hw); return (h.done ? '✅ Completed: ' : '↩️ Reopened: ') + aiClip(h.text, 40);
+    }
+    case 'delete_homework': {
+      const hw = storeGet('hw_' + u) || [], h = hw.find(x => String(x.id) === String(a.id)); if (!h) return null;
+      if (!confirm('Delete homework "' + aiClip(h.text, 60) + '"?')) return null;
+      storeSet('hw_' + u, hw.filter(x => x !== h)); return '🗑️ Deleted homework: ' + aiClip(h.text, 40);
+    }
+    case 'set_timetable_day': {
+      const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'], day = days.find(d => d.toLowerCase() === String(a.day || '').toLowerCase());
+      if (!day || !Array.isArray(a.slots)) return null;
+      const tt = storeGet('timetable') || {};
+      tt[day] = a.slots.slice(0, 12).map(s => ({ time: aiClean(s.time), subj: aiClean(s.subj), room: aiClean(s.room) }));
+      storeSet('timetable', tt); return '🗓️ Updated ' + day + ' timetable';
+    }
+    case 'create_folder': {
+      const r = aiFindFolder(a.kind, a.subject, a.name); if (r.f) return null;
+      const r2 = aiFindFolder(a.kind, a.subject, a.name, true); saveFolders(r2.kind, r2.subject, r2.fs); return '📁 Created folder "' + r2.f.name + '"';
+    }
+    case 'rename_folder': {
+      const r = aiFindFolder(a.kind, a.subject, a.folder); if (!r.f || !a.name) return null;
+      r.f.name = aiClean(a.name).slice(0, 60); saveFolders(r.kind, r.subject, r.fs); return '✏️ Renamed folder to "' + r.f.name + '"';
+    }
+    case 'label_item': case 'star_item': {
+      const r = aiFindFolder(a.kind, a.subject, a.folder), it = r.f && r.f.images[a.idx]; if (!it) return null;
+      if (a.type === 'label_item') it.label = aiClean(a.label).slice(0, 80); else it.important = a.important !== false;
+      it.editedAt = Date.now(); saveFolders(r.kind, r.subject, r.fs);
+      return a.type === 'label_item' ? '🏷️ Labelled file "' + it.label + '"' : '⭐ ' + (it.important ? 'Starred' : 'Unstarred') + ' "' + (it.label || it.name) + '"';
+    }
+    case 'save_note': {
+      const r = aiFindFolder(a.kind, a.subject, a.folder || 'AI Notes', true), title = aiClean(a.title || 'AI note').slice(0, 60), text = String(a.text || '').slice(0, 20000);
+      if (!text) return null;
+      const fileId = 'f_' + uid(), blob = new Blob([text], { type: 'text/plain' });
+      await idbPutBlob(fileId, blob);
+      r.f.images.push({ fileId, name: title.replace(/[\\/:*?"|]/g, '') + '.txt', type: 'text/plain', size: blob.size, label: title, ts: Date.now(), editedAt: Date.now(), important: false, aiHandwriting: null, aiSummary: null, text });
+      r.f.ts = Date.now(); saveFolders(r.kind, r.subject, r.fs); return '💾 Saved note "' + title + '" in ' + r.f.name;
+    }
+    case 'post_announcement': {
+      if (currentUser.role !== 'admin') return '⛔ Only admins can post announcements';
+      const anns = storeGet('announcements') || [];
+      anns.push({ title: aiClean(a.title).slice(0, 100), body: aiClean(a.body).slice(0, 1000), by: currentUser.name, ts: Date.now() });
+      storeSet('announcements', anns); return '📢 Posted announcement "' + aiClean(a.title) + '"';
+    }
+    case 'open': aiGoto(a.page, a); return '➡️ Opened ' + a.page;
+    default: return null;
+  }
+}
+function aiRefreshViews() {
+  try { renderHomework(); renderTimetable(); renderAnnouncements(); renderSection('notes'); renderSection('qp'); } catch (e) {}
+}
+
+// ---- Image generation (free Pollinations service) ----
+function aiImgUrl(prompt, size) {
+  return 'https://image.pollinations.ai/prompt/' + encodeURIComponent(String(prompt).slice(0, 600)) + '?width=' + size + '&height=' + size + '&nologo=true&seed=' + Math.floor(Math.random() * 1e6);
+}
+function aiShowImage(prompt) { aiPush({ k: 'image', prompt, url: aiImgUrl(prompt, 768) }); }
+function aiLoadImg(id) {
+  const img = $id(id), ph = $id(id + '_ph'); img.style.display = 'none'; $id(id + '_b').style.display = 'none'; ph.style.display = 'flex';
+  ph.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div> Generating image…';
+  img.onload = () => { ph.style.display = 'none'; img.style.display = 'block'; $id(id + '_b').style.display = 'flex'; };
+  img.onerror = () => { ph.innerHTML = '⚠️ Image service is busy. <span style="color:var(--accent);cursor:pointer;" onclick="aiImgRetry(\'' + id + '\')">Tap to retry</span>'; };
+  img.src = aiImgs[id].url;
+}
+function aiImgRetry(id) { const o = aiImgs[id]; o.url = aiImgUrl(o.prompt, 768); if (o.e) { o.e.url = o.url; aiSave(); } aiLoadImg(id); }
+async function aiImgBlob(id) { const r = await fetch(aiImgs[id].url); if (!r.ok) throw new Error('fetch'); return r.blob(); }
+async function aiImgDownload(id) {
+  try { const b = await aiImgBlob(id), a = document.createElement('a'); a.href = URL.createObjectURL(b); a.download = 'studynest-ai-image.jpg'; document.body.appendChild(a); a.click(); a.remove(); }
+  catch (e) { window.open(aiImgs[id].url, '_blank'); }
+}
+async function aiImgToNotes(id) {
+  try {
+    const b = await aiImgBlob(id), r = aiFindFolder('notes', currentSubject, 'AI Images', true), fileId = 'f_' + uid();
+    await idbPutBlob(fileId, b);
+    r.f.images.push({ fileId, name: 'ai-image.jpg', type: b.type || 'image/jpeg', size: b.size, label: aiClip(aiImgs[id].prompt, 40), ts: Date.now(), editedAt: Date.now(), important: false, aiHandwriting: null, aiSummary: null });
+    saveFolders(r.kind, r.subject, r.fs); renderSection('notes'); showToast('Saved to Notes › AI Images');
+  } catch (e) { showToast('Could not save the image'); }
+}
+
+// ---- Video generation (AI scenes + generated images, rendered and recorded in the browser) ----
+function aiLoadImgEl(url) {
+  return new Promise(res => { const i = new Image(), t = setTimeout(() => res(null), 40000); i.crossOrigin = 'anonymous'; i.onload = () => { clearTimeout(t); res(i); }; i.onerror = () => { clearTimeout(t); res(null); }; i.src = url; });
+}
+function aiWrap(ctx, text, maxW) {
+  const words = String(text).split(' '), lines = []; let cur = '';
+  words.forEach(w => { const t = cur ? cur + ' ' + w : w; if (ctx.measureText(t).width > maxW && cur) { lines.push(cur); cur = w; } else cur = t; });
+  if (cur) lines.push(cur); return lines;
+}
+async function aiMakeVideo(spec, box) {
+  const scenes = (spec.scenes || []).slice(0, 6).filter(s => s && (s.text || s.image_prompt)); if (!scenes.length) throw new Error('No scenes to render.');
+  const mime = window.MediaRecorder && ['video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm', 'video/mp4'].find(m => MediaRecorder.isTypeSupported(m));
+  if (!mime) throw new Error('This browser cannot record video. Try Chrome or Edge.');
+  const W = 720, H = 720, SEC = 4500, cv = document.createElement('canvas'); cv.width = W; cv.height = H; cv.style.cssText = 'width:100%;border-radius:12px;margin-top:8px;';
+  const ctx = cv.getContext('2d'), st = document.createElement('div'); st.className = 'ai-thinking'; st.style.marginTop = '8px';
+  box.appendChild(st); box.appendChild(cv);
+  st.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div> Generating scene images…';
+  const imgs = await Promise.all(scenes.map(s => aiLoadImgEl(aiImgUrl(s.image_prompt || s.text, 720))));
+  const rec = new MediaRecorder(cv.captureStream(30), { mimeType: mime, videoBitsPerSecond: 3000000 }), chunks = [];
+  rec.ondataavailable = e => e.data && e.data.size && chunks.push(e.data);
+  const done = new Promise(r => rec.onstop = r), total = scenes.length * SEC, t0 = performance.now();
+  rec.start(500); st.innerHTML = '🎬 Recording — keep this tab open…';
+  const frame = now => {
+    const t = now - t0, i = Math.min(scenes.length - 1, Math.floor(t / SEC)), p = (t - i * SEC) / SEC, s = scenes[i], im = imgs[i];
+    const g = ctx.createLinearGradient(0, 0, W, H); g.addColorStop(0, '#1a1a2e'); g.addColorStop(1, '#7c3aed'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    if (im) { const z = 1 + 0.12 * p, sc = Math.max(W / im.width, H / im.height) * z, w = im.width * sc, h = im.height * sc; ctx.drawImage(im, (W - w) / 2, (H - h) / 2, w, h); }
+    const sh = ctx.createLinearGradient(0, H * 0.5, 0, H); sh.addColorStop(0, 'rgba(0,0,0,0)'); sh.addColorStop(1, 'rgba(0,0,0,0.82)'); ctx.fillStyle = sh; ctx.fillRect(0, H * 0.5, W, H * 0.5);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 34px "Segoe UI",system-ui,sans-serif'; ctx.textBaseline = 'top'; ctx.shadowColor = 'rgba(0,0,0,.7)'; ctx.shadowBlur = 8;
+    const lines = aiWrap(ctx, s.text || '', W - 80).slice(0, 4); lines.forEach((l, k) => ctx.fillText(l, 40, H - 60 - (lines.length - k) * 44));
+    ctx.shadowBlur = 0; if (i === 0 && spec.title) { ctx.font = 'bold 22px "Segoe UI",system-ui,sans-serif'; ctx.fillStyle = '#00f5c8'; ctx.fillText('📚 ' + String(spec.title).slice(0, 40), 40, 30); }
+    ctx.fillStyle = '#00f5c8'; ctx.fillRect(0, H - 8, W * Math.min(1, t / total), 8);
+    const edge = Math.min(p / 0.08, (1 - p) / 0.08, 1); if (edge < 1) { ctx.fillStyle = 'rgba(0,0,0,' + (1 - edge) * 0.85 + ')'; ctx.fillRect(0, 0, W, H); }
+    if (t < total) requestAnimationFrame(frame); else rec.stop();
+  };
+  requestAnimationFrame(frame); await done;
+  const blob = new Blob(chunks, { type: mime.split(';')[0] }), url = URL.createObjectURL(blob), ext = mime.includes('mp4') ? 'mp4' : 'webm';
+  box.innerHTML = `<div style="color:var(--muted);font-size:.78rem;margin-bottom:8px;">🎬 ${escapeHtml(aiClip(spec.title || 'AI video', 80))}</div><video src="${url}" controls playsinline style="width:100%;border-radius:12px;"></video>
+    <div class="ai-action-row"><a class="ai-mini-btn" style="text-decoration:none;" href="${url}" download="studynest-video.${ext}">⬇️ Download video</a></div>`;
+}
+
+// ---- Send ----
+async function sendAI() {
+  if (aiBusy) return;
+  const inp = $id('aiInput'); let q = inp.value.trim();
+  if (!q && !aiPending.length) return;
+  aiOpen();
+  if (aiMode === 'image' && q) { inp.value = ''; aiPush({ k: 'user', text: '🎨 ' + q }); aiSetMode('image'); aiShowImage(q); return; }
+  const shownQ = q, wantVideo = aiMode === 'video';
+  if (wantVideo) { q = 'Make a short explainer video about: ' + (q || 'the attached material') + '. Reply with one short sentence and a make_video action with 4-6 scenes.'; aiSetMode('video'); }
+  aiBusy = true; inp.value = '';
+  const T0 = performance.now(), steps = []; let lastT = T0, timer = null, think = null;
+  const lap = label => { const n = performance.now(); steps.push([label, (n - lastT) / 1000]); lastT = n; };
+  try {
+    const ql = q.toLowerCase(), had = aiPending.length;
+    for (const kind of ['notes', 'qp']) for (const s of AI_SUBJECTS) for (const f of getFolders(kind, s)) {
+      if (f.name.length >= 3 && ql.includes(f.name.toLowerCase()) && !aiPending.some(p => p.folder === f.id)) await aiAttachFolder(kind, s, f);
+    }
+    if (openFolderCtx && /\b(this|these|current|open)\b/i.test(q)) {
+      const f = getFolders(openFolderCtx.kind, getSubj(openFolderCtx.kind)).find(x => x.id === openFolderCtx.id);
+      if (f && !aiPending.some(p => p.folder === f.id)) await aiAttachFolder(openFolderCtx.kind, getSubj(openFolderCtx.kind), f);
+    }
+    const names = aiPending.map(p => p.name);
+    aiPush({ k: 'user', text: wantVideo ? '🎬 ' + (shownQ || 'Video from attachments') : (shownQ || '(attachment)'), files: names });
+    if (names.length) lap('Loaded ' + names.length + ' attached file' + (names.length > 1 ? 's' : '') + (aiPending.some(p => p.auto) ? ' from your notes' : ''));
+    const system = aiSystem(); lap('Read your app data: notes, papers, timetable, homework, seating, announcements');
+    const blocks = aiPending.map(p => p.kind === 'image' ? { type: 'image', source: { type: 'base64', media_type: detectMime(p.data), data: p.data.split(',')[1] } }
+      : p.kind === 'pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.data.split(',')[1] } }
+      : { type: 'text', text: '[Attached file: ' + p.name + ']\n' + p.text });
+    blocks.push({ type: 'text', text: q || 'Please look at the attached files.' });
+    aiPending = []; aiBar();
+    think = document.createElement('div'); think.className = 'ai-thinking'; think.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div> <span>Thinking… 0.0s</span>';
+    $id('aiMessages').appendChild(think); think.scrollIntoView({ block: 'end' });
+    timer = setInterval(() => { think.lastElementChild.textContent = 'Thinking… ' + aiFmt((performance.now() - T0) / 1000); }, 100);
+    const payload = { max_tokens: 3000, system, messages: aiHistory.slice(-12).concat([{ role: 'user', content: blocks }]) };
+    if (JSON.stringify(payload).length > 4200000) throw new Error('Attachments are too large (about 4 MB total max). Remove a file or attach fewer pages.');
+    const data = await callAI(payload); lap('AI model reasoned and wrote the answer');
+    clearInterval(timer); think.remove(); think = null;
+    const raw = aiTextFrom(data) || 'Sorry, I could not get an answer. Please try again.';
+    let actions = []; const m = raw.match(/<actions>([\s\S]*?)<\/actions>/i);
+    if (m) { try { const j = JSON.parse(m[1].trim().replace(/^```(?:json)?\s*|\s*```$/g, '')); actions = Array.isArray(j) ? j : [j]; } catch (e) {} }
+    const text = raw.replace(/<actions>[\s\S]*?(<\/actions>|$)/i, '').trim();
+    if (!wantVideo && !actions.some(a => a && a.type === 'generate_image') && /\b(image|picture|photo|diagram|illustration|drawing|sketch|poster)\b/i.test(shownQ) && /\b(generate|create|make|draw|show|give|need|want|can you|please)\b|\b(image|picture|diagram|photo) of\b/i.test(shownQ))
+      actions.push({ type: 'generate_image', prompt: shownQ.slice(0, 300) + (/diagram|illustration/i.test(shownQ) ? ', clean labelled educational illustration, white background' : '') });
+    aiHistory.push({ role: 'user', content: (shownQ || '(attachment)') + (names.length ? '\n[attached: ' + names.join(', ') + ']' : '') }, { role: 'assistant', content: text || '(done)' });
+    if (aiHistory.length > 24) aiHistory = aiHistory.slice(-24);
+    const snap = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('sn_') && !k.includes('aichat_')) snap[k] = localStorage.getItem(k); }
+    const done = [], media = []; let nav = null;
+    for (const a of actions.slice(0, 12)) {
+      if (!a || !a.type) continue;
+      if (a.type === 'generate_image' && a.prompt) { media.push(() => aiShowImage(a.prompt)); continue; }
+      if (a.type === 'make_video') { media.push(() => { aiPush({ k: 'video', title: a.title }); const el = document.createElement('div'); el.className = 'ai-bubble'; $id('aiMessages').appendChild(el); aiMakeVideo(a, el).catch(e => { el.innerHTML = '⚠️ ' + escapeHtml(e.message || 'Video failed.'); }); el.scrollIntoView({ block: 'end' }); }); continue; }
+      if (a.type === 'open') { nav = a; continue; }
+      try { const r = await aiRun(a); if (r) done.push(r); } catch (e) { done.push('⚠️ ' + a.type + ' failed'); }
+    }
+    if (done.length) lap('Applied ' + done.length + ' change' + (done.length > 1 ? 's' : '') + ' to your app');
+    if (media.length) lap('Started ' + media.length + ' image/video generation' + (media.length > 1 ? 's' : ''));
+    const undo = {}; Object.keys(snap).forEach(k => { if (localStorage.getItem(k) !== snap[k]) undo[k] = snap[k]; });
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('sn_') && !k.includes('aichat_') && !(k in snap)) undo[k] = null; }
+    aiUndo = done.length && Object.keys(undo).length ? undo : null;
+    aiPush({ k: 'ai', text: text || (done.length || media.length ? 'Done.' : '…'), meta: { total: (performance.now() - T0) / 1000, steps } });
+    if (done.length) { aiRefreshViews(); aiPush({ k: 'applied', items: done }); }
+    media.forEach(fn => fn());
+    if (nav) setTimeout(() => aiGoto(nav.page, nav), 1200);
+  } catch (e) {
+    if (think) think.remove();
+    aiDraw({ k: 'error', text: e.message || 'Connection error. Please try again.' }, true);
+  } finally { if (timer) clearInterval(timer); aiBusy = false; }
+}
+function aiUndoLast(btn) {
+  if (!aiUndo) return;
+  Object.keys(aiUndo).forEach(k => { if (aiUndo[k] === null) localStorage.removeItem(k); else localStorage.setItem(k, aiUndo[k]); });
+  aiUndo = null; aiRefreshViews(); btn.outerHTML = '<span style="color:var(--muted);font-size:.75rem;">Undone ✓</span>';
+}
+
 document.addEventListener('DOMContentLoaded', () => {
   const ai = document.getElementById('aiInput');
   if(ai) ai.addEventListener('keydown', e => { if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendAI();} });

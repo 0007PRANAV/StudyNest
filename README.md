@@ -2,6 +2,13 @@
 
 A mobile-first study companion with notes, question papers, timetables, homework, seating, friends, chat, announcements and an AI tutor.
 
+## AI tutor
+
+- Sees your notes, question papers, timetable, homework, seating and announcements, and can change them (with an Undo button).
+- Attach images, PDFs and text files, or attach a whole notes folder; mention a folder name and it is attached automatically.
+- Generates images (free Pollinations service) and short captioned explainer videos recorded in the browser.
+- Chat history is saved per user on the device; answers render as formatted markdown with a "Thought for Ns" step breakdown.
+
 ## Storage
 
 Uploaded photos, videos, PDFs, ZIPs and other files are stored as Blobs in IndexedDB on the user's device. Only small metadata (names, labels, timestamps) is kept in localStorage. This avoids the ~5 MB localStorage limit that previously caused uploads to disappear.
@@ -20,7 +27,10 @@ The browser never holds an API key. AI requests go to `/api/ai`, which is implem
    - `GEMINI_API_KEY` — free tier available from [Google AI Studio](https://aistudio.google.com/apikey)
    - `ANTHROPIC_API_KEY` — paid Anthropic key
 3. Redeploy the project.
-4. Optional overrides: `GEMINI_MODEL` (default `gemini-3.8-flash`), `ANTHROPIC_MODEL` (default `claude-sonnet-5-5`), or `AI_PROVIDER` (`gemini` / `anthropic`).
+4. Optional overrides: `GEMINI_MODEL`, `ANTHROPIC_MODEL`, or `AI_PROVIDER` (`gemini` / `anthropic`). Providers are tried in order and fall back automatically if one fails.
+5. Check the setup by opening `/api/ai` in a browser: it shows which keys the server can see (never the key values).
+
+Note: keys must be set in Vercel (or as Cloudflare Worker secrets). GitHub repository/environment secrets are not visible to the running site.
 
 Without either key, text AI falls back to the free, rate-limited Pollinations API so the AI tutor still works. Image-based AI tools require `GEMINI_API_KEY` or `ANTHROPIC_API_KEY`.
 
