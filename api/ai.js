@@ -4,6 +4,7 @@ const POLLINATIONS_URL = 'https://text.pollinations.ai/openai';
 const ANTHROPIC_MODELS = ['claude-sonnet-5-5', 'claude-haiku-5-5'];
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODELS = ['google/gemini-2.5-flash', 'openai/gpt-4o-mini'];
+const VERTEX_URL = 'https://aiplatform.googleapis.com/v1/publishers/google/models/';
 const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3.8-flash'];
 
 const clampMaxTokens = v => Math.min(Math.max(parseInt(v, 10) || 1000, 1), 4000);
@@ -53,7 +54,7 @@ async function callAnthropic(payload, key, E) {
   return last;
 }
 
-function toGeminiContents(messages) {
+function toGeminiContents(messages, camel) {
   const contents = [];
   for (const m of messages) {
     const parts = [];
@@ -61,30 +62,38 @@ function toGeminiContents(messages) {
     else if (Array.isArray(m.content)) for (const b of m.content) {
       if (!b) continue;
       if (b.type === 'text' && b.text) parts.push({ text: String(b.text) });
-      else if ((b.type === 'image' || b.type === 'document') && b.source && b.source.data) parts.push({ inline_data: { mime_type: b.source.media_type || (b.type === 'document' ? 'application/pdf' : 'image/jpeg'), data: b.source.data } });
+      else if ((b.type === 'image' || b.type === 'document') && b.source && b.source.data) {
+        const mt = b.source.media_type || (b.type === 'document' ? 'application/pdf' : 'image/jpeg');
+        parts.push(camel ? { inlineData: { mimeType: mt, data: b.source.data } } : { inline_data: { mime_type: mt, data: b.source.data } });
+      }
     }
     if (parts.length) contents.push({ role: m.role === 'assistant' ? 'model' : 'user', parts });
   }
   return contents;
 }
 async function callGemini(payload, keys, E) {
-  const models = E.GEMINI_MODEL || E.AI_MODEL ? [cleanVal(E.GEMINI_MODEL || E.AI_MODEL)] : GEMINI_MODELS;
-  let last;
+  const models = E.GEMINI_MODEL || E.AI_MODEL ? [cleanVal(E.GEMINI_MODEL || E.AI_MODEL)] : GEMINI_MODELS, errs = [];
   for (let ki = 0; ki < keys.length; ki++) {
-    for (const model of models) {
-      const body = { contents: toGeminiContents(payload.messages), generationConfig: { maxOutputTokens: clampMaxTokens(payload.max_tokens) } };
-      if (payload.system) body.system_instruction = { parts: [{ text: String(payload.system) }] };
-      const r = await postJSON(GEMINI_URL + encodeURIComponent(model) + ':generateContent', { 'x-goog-api-key': keys[ki] }, body);
-      const tag = 'Gemini key ' + (ki + 1) + ' (' + model + ')';
-      if (!r.ok) { last = { status: r.status, error: tag + ': ' + errMsg(r.data, 'HTTP ' + r.status) }; if (r.status !== 404) break; continue; }
-      const c = r.data && r.data.candidates && r.data.candidates[0];
-      const answer = ((c && c.content && c.content.parts) || []).filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('\n').trim();
-      if (answer) return { status: 200, body: { content: [{ type: 'text', text: answer }] } };
-      last = { status: 502, error: tag + ' returned no text (' + ((c && c.finishReason) || (r.data && r.data.promptFeedback && r.data.promptFeedback.blockReason) || 'empty') + ').' };
-      break;
+    // "AQ." keys are Vertex AI express-mode keys; "AIza" keys are Google AI Studio keys.
+    const endpoints = /^AQ\./.test(keys[ki]) ? ['vertex', 'studio'] : ['studio'];
+    let done = false;
+    for (const ep of endpoints) {
+      if (done) break;
+      for (const model of models) {
+        const vx = ep === 'vertex', url = vx ? VERTEX_URL + encodeURIComponent(model) + ':generateContent' : GEMINI_URL + encodeURIComponent(model) + ':generateContent';
+        const body = { contents: toGeminiContents(payload.messages, vx), generationConfig: { maxOutputTokens: clampMaxTokens(payload.max_tokens) } };
+        if (payload.system) body[vx ? 'systemInstruction' : 'system_instruction'] = { parts: [{ text: String(payload.system) }] };
+        const r = await postJSON(url, { 'x-goog-api-key': keys[ki] }, body);
+        const tag = 'Gemini key ' + (ki + 1) + ' [' + (vx ? 'Vertex' : 'AI Studio') + ', ' + model + ']';
+        if (!r.ok) { errs.push(tag + ': ' + errMsg(r.data, 'HTTP ' + r.status)); if (r.status !== 404) break; continue; }
+        const cd = r.data && r.data.candidates && r.data.candidates[0];
+        const answer = ((cd && cd.content && cd.content.parts) || []).filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('\n').trim();
+        if (answer) return { status: 200, body: { content: [{ type: 'text', text: answer }] } };
+        errs.push(tag + ' returned no text (' + ((cd && cd.finishReason) || (r.data && r.data.promptFeedback && r.data.promptFeedback.blockReason) || 'empty') + ').'); done = true; break;
+      }
     }
   }
-  return last;
+  return { status: 502, error: errs.join(' | ') || 'No Gemini key available.' };
 }
 
 async function callOpenRouter(payload, key, E) {
