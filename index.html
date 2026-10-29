@@ -404,7 +404,7 @@
 
   <!-- AI TUTOR -->
   <div class="page" id="pageAI">
-    <div class="flex-between"><div class="section-title" style="margin-bottom:0;">🤖 AI Tutor</div><button class="ai-mini-btn" onclick="aiClearChat()">🧹 New chat</button></div>
+    <div class="flex-between"><div class="section-title" style="margin-bottom:0;">🤖 AI Tutor</div><div style="display:flex;gap:6px;"><button class="ai-mini-btn" onclick="aiHistoryModal()">🕘 History</button><button class="ai-mini-btn" onclick="aiNewChat()">➕ New</button></div></div>
     <div id="aiMessages" style="display:flex;flex-direction:column;gap:10px;margin:14px 0;"></div>
     <div id="aiAttachBar" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
     <div class="card" style="margin-bottom:0;">
@@ -879,25 +879,30 @@ function detectMime(dataUrl) { const m = dataUrl.match(/^data:(image\/[a-z0-9.+-
 
 // Calls the Worker AI proxy at /api/ai. The Anthropic API key stays on the server.
 async function callAI(payload) {
+  const body = JSON.stringify(payload), kb = Math.round(body.length / 1024);
+  const fail = (msg, detail) => { const er = new Error(msg); er.detail = detail; return er; };
   let resp;
   try {
-    resp = await fetch('/api/ai', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(payload)
-    });
+    resp = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
   } catch (e) {
-    throw new Error('Connection error. Check your internet and try again.');
+    throw fail('Could not reach the AI server. Check your internet connection' + (kb > 3000 ? ' (this request is also very large, ' + kb + ' KB, which can make the connection fail).' : '.'), 'Network error: ' + (e && e.message) + '\nRequest size: ' + kb + ' KB');
   }
   let data = null;
   const raw = await resp.text();
   try { data = raw ? JSON.parse(raw) : null; } catch (e) { data = null; }
   if (!resp.ok) {
-    const msg = (data && data.error && (data.error.message || data.error)) || ('AI request failed (HTTP ' + resp.status + ').');
-    throw new Error(typeof msg === 'string' ? msg : 'AI request failed.');
+    let msg = data && data.error && (data.error.message || data.error);
+    if (resp.status === 413 || /FUNCTION_PAYLOAD_TOO_LARGE|Request Entity Too Large/i.test(raw)) msg = 'Your attachments are too large for the server (' + kb + ' KB sent; the limit is about 4.5 MB per message). Remove a file, attach fewer photos, or ask about the folder in two parts.';
+    else if (resp.status === 504 || /FUNCTION_INVOCATION_TIMEOUT/i.test(raw)) msg = 'The AI took too long to read your files and the server stopped waiting (HTTP 504). Try fewer or smaller photos, then retry.';
+    else if (resp.status === 404) msg = 'The AI endpoint /api/ai was not found on this site (HTTP 404). Redeploy the project so the api folder is included.';
+    else if (!msg) msg = 'AI request failed (HTTP ' + resp.status + ').';
+    throw fail(typeof msg === 'string' ? msg : 'AI request failed.', 'HTTP ' + resp.status + ' ' + (resp.statusText || '') + '\nRequest size: ' + kb + ' KB\nServer said: ' + raw.slice(0, 700));
   }
-  if (!data) throw new Error('The AI service returned an empty response.');
+  if (!data) throw fail('The AI service returned an empty response.', 'HTTP ' + resp.status + '\nRequest size: ' + kb + ' KB');
   return data;
+}
+function aiErrHtml(e) {
+  return '<div class="ai-result-box" style="border-color:var(--danger);"><b>⚠️ ' + escapeHtml(e.message || 'AI request failed.') + '</b>' + (e.detail ? '<details class="ai-think" style="margin-top:8px;"><summary>Technical details</summary><pre style="white-space:pre-wrap;font-size:.72rem;margin:6px 0 0;">' + escapeHtml(e.detail) + '</pre></details>' : '') + '</div>';
 }
 function aiTextFrom(data) {
   if (!data) return '';
@@ -1472,7 +1477,7 @@ async function aiRewriteHandwriting() {
     saveFolders(aiCtx.kind, ctx.subject, ctx.folders);
     renderAIResult('✍️ Neat Rewrite', text, 'handwriting');
   } catch (e) {
-    resultBox.innerHTML = `<div class="ai-result-box" style="border-color:var(--danger);">⚠️ ${escapeHtml(e.message || 'AI request failed.')}</div>`;
+    resultBox.innerHTML = aiErrHtml(e);
   }
 }
 async function aiSummarizeNote() {
@@ -1496,7 +1501,7 @@ async function aiSummarizeNote() {
     saveFolders(aiCtx.kind, ctx.subject, ctx.folders);
     renderAIResult('🧠 Easy Summary', text, 'summary');
   } catch (e) {
-    resultBox.innerHTML = `<div class="ai-result-box" style="border-color:var(--danger);">⚠️ ${escapeHtml(e.message || 'AI request failed.')}</div>`;
+    resultBox.innerHTML = aiErrHtml(e);
   }
 }
 let lastAIResultText = '';
@@ -1938,17 +1943,61 @@ const $id = x => document.getElementById(x);
 const aiClean = s => String(s == null ? '' : s).replace(/[<>]/g, '');
 const aiClip = (s, n) => String(s || '').replace(/\s+/g, ' ').slice(0, n);
 
-const aiKey = () => 'aichat_' + currentUser.username;
-let aiLog = [], aiLoadedFor = null;
-function aiSave() { try { storeSet(aiKey(), { history: aiHistory.slice(-24), log: aiLog.slice(-60) }); } catch (e) {} }
-function aiOpen() {
-  if (aiLoadedFor !== currentUser.username) {
-    aiLoadedFor = currentUser.username; const d = storeGet(aiKey()) || {};
-    aiHistory = d.history || []; aiLog = d.log || []; aiPending = [];
-    $id('aiMessages').innerHTML = ''; aiLog.forEach(e => aiDraw(e, false)); aiBar();
-    const m = $id('aiMessages'); if (m.lastElementChild) setTimeout(() => m.lastElementChild.scrollIntoView({ block: 'end' }), 50);
+let aiLog = [], aiLoadedFor = null, aiStore = null, aiLast = null;
+const aiStoreKey = () => 'aichats_' + currentUser.username;
+const aiNewObj = () => ({ id: uid(), title: 'New chat', ts: Date.now(), history: [], log: [] });
+const aiTitle = log => { const u = log.find(e => e.k === 'user'); return u ? aiClip(String(u.text || '').replace(/^[🎨🎬]\s*/, ''), 42) || 'New chat' : 'New chat'; };
+const aiCur = () => aiStore.chats.find(c => c.id === aiStore.active);
+function aiPersist() {
+  aiStore.chats.sort((a, b) => b.ts - a.ts); aiStore.chats = aiStore.chats.filter((c, i) => i < 30 || c.id === aiStore.active);
+  try { storeSet(aiStoreKey(), aiStore); } catch (e) { aiStore.chats = aiStore.chats.slice(0, 8); try { storeSet(aiStoreKey(), aiStore); } catch (e2) {} }
+}
+function aiSave() {
+  if (!aiStore) return; const c = aiCur(); if (!c) return;
+  c.history = aiHistory.slice(-24); c.log = aiLog.slice(-60); c.title = aiTitle(c.log); if (c.log.length) c.ts = Date.now(); aiPersist();
+}
+function aiLoadStore() {
+  let s = storeGet(aiStoreKey());
+  if (!s || !Array.isArray(s.chats)) {
+    s = { active: null, chats: [] }; const old = storeGet('aichat_' + currentUser.username);
+    if (old && (old.log || []).length) { const c = aiNewObj(); c.history = old.history || []; c.log = old.log; c.title = aiTitle(c.log); s.chats.push(c); s.active = c.id; }
   }
+  if (!s.chats.find(c => c.id === s.active)) { const c = aiNewObj(); s.chats.unshift(c); s.active = c.id; }
+  return s;
+}
+function aiShowChat() {
+  const c = aiCur(); aiHistory = (c.history || []).slice(); aiLog = (c.log || []).slice(); aiPending = [];
+  const m = $id('aiMessages'); m.innerHTML = ''; aiLog.forEach(e => aiDraw(e, false)); aiBar(); aiWelcome();
+  if (m.lastElementChild) setTimeout(() => m.lastElementChild.scrollIntoView({ block: 'end' }), 50);
+}
+function aiOpen() {
+  if (aiLoadedFor !== currentUser.username) { aiLoadedFor = currentUser.username; aiStore = aiLoadStore(); aiShowChat(); }
   aiWelcome();
+}
+function aiNewChat() {
+  if (aiBusy) { showToast('Wait for the current answer to finish'); return; }
+  aiOpen(); if (!aiLog.length) { showToast('This is already a new chat'); return; }
+  aiSave(); const c = aiNewObj(); aiStore.chats.unshift(c); aiStore.active = c.id; aiPersist(); aiShowChat();
+}
+function aiSwitchChat(id) {
+  if (aiBusy) { showToast('Wait for the current answer to finish'); return; }
+  aiSave(); aiStore.active = id; aiPersist(); closeModalDirect(); aiShowChat();
+}
+function aiDeleteChat(id) {
+  if (!confirm('Delete this chat?')) return;
+  aiStore.chats = aiStore.chats.filter(c => c.id !== id);
+  if (!aiStore.chats.length) aiStore.chats.push(aiNewObj());
+  const was = aiStore.active === id; if (was) aiStore.active = aiStore.chats[0].id;
+  aiPersist(); if (was) { aiShowChat(); } aiHistoryModal();
+}
+function aiHistoryModal() {
+  aiOpen(); aiSave();
+  const rows = aiStore.chats.filter(c => c.log.length || c.id === aiStore.active).map(c => `<div style="display:flex;gap:8px;align-items:center;"><button class="btn btn-ghost" style="flex:1;text-align:left;padding:10px 14px;${c.id === aiStore.active ? 'border-color:var(--accent);' : ''}" onclick="aiSwitchChat('${c.id}')"><div style="font-weight:600;">${escapeHtml(c.title)}</div><div style="color:var(--muted);font-size:.72rem;">${new Date(c.ts).toLocaleString()} · ${c.log.filter(e => e.k === 'user').length} messages${c.id === aiStore.active ? ' · current' : ''}</div></button><button class="ai-mini-btn" onclick="aiDeleteChat('${c.id}')">🗑️</button></div>`).join('');
+  openModal(`<div class="modal-title">🕘 Chat history</div><div style="max-height:58vh;overflow:auto;display:flex;flex-direction:column;gap:8px;margin-bottom:12px;">${rows || '<p style="color:var(--muted)">No chats yet.</p>'}</div><button class="btn btn-accent" style="width:100%;" onclick="closeModalDirect();aiNewChat()">➕ New chat</button>`);
+}
+function aiRetry() {
+  if (!aiLast || aiBusy) return;
+  aiPending = aiLast.pending.slice(); $id('aiInput').value = aiLast.q; sendAI();
 }
 function aiWelcome() {
   const m = $id('aiMessages'); if (!m || aiLog.length || $id('aiWelcomeBox')) return;
@@ -2004,14 +2053,10 @@ function aiDraw(e, live) {
     m.appendChild(el); aiLoadImg(id); return el;
   } else if (e.k === 'video') {
     el.className = 'ai-bubble'; el.innerHTML = '<div class="ai-md"><p>🎬 <b>' + escapeHtml(e.title || 'Video') + '</b></p><p style="color:var(--muted)">Videos are not kept after you leave. Ask again to regenerate it.</p></div>';
-  } else { el.className = 'ai-bubble'; el.style.borderColor = 'var(--danger)'; el.innerHTML = '⚠️ ' + escapeHtml(e.text || 'Error'); }
+  } else { el.className = 'ai-bubble'; el.style.borderColor = 'var(--danger)'; el.innerHTML = '<div class="ai-md"><p><b>⚠️ ' + escapeHtml(e.text || 'Error') + '</b></p></div>' + (e.detail ? '<details class="ai-think"><summary>Technical details</summary><pre style="white-space:pre-wrap;font-size:.72rem;margin:6px 0 0;">' + escapeHtml(e.detail) + '</pre></details>' : '') + (live && aiLast ? '<div class="ai-action-row"><button class="ai-mini-btn" onclick="aiRetry()">🔄 Retry</button></div>' : ''); }
   m.appendChild(el); if (live) el.scrollIntoView({ block: 'end' }); return el;
 }
 function aiPush(e) { aiLog.push(e); aiSave(); return aiDraw(e, true); }
-function aiClearChat() {
-  if ((aiLog.length || aiHistory.length) && !confirm('Start a new chat? This clears the saved conversation.')) return;
-  aiHistory = []; aiPending = []; aiLog = []; aiSave(); $id('aiMessages').innerHTML = ''; aiBar(); aiWelcome();
-}
 
 // ---- Snapshot of every section (sent to the AI with each message) ----
 function aiSnapshot() {
@@ -2123,7 +2168,6 @@ function aiSetMode(m) {
   $id('aiBtnVid').classList.toggle('on', aiMode === 'video');
   $id('aiInput').placeholder = aiMode === 'image' ? '🎨 Describe the image to generate…' : aiMode === 'video' ? '🎬 What should the video explain?' : 'Ask anything, or tell me to change your notes, homework, timetable…';
 }
-function aiClearChat() { aiHistory = []; aiPending = []; $id('aiMessages').innerHTML = ''; aiBar(); aiWelcome(); }
 
 // ---- Actions ----
 function aiFindFolder(kind, subject, ref, create) {
@@ -2300,12 +2344,12 @@ async function sendAI() {
       : p.kind === 'pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.data.split(',')[1] } }
       : { type: 'text', text: '[Attached file: ' + p.name + ']\n' + p.text });
     blocks.push({ type: 'text', text: q || 'Please look at the attached files.' });
-    aiPending = []; aiBar();
+    aiLast = { q: shownQ, pending: aiPending.slice() }; aiPending = []; aiBar();
     think = document.createElement('div'); think.className = 'ai-thinking'; think.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div> <span>Thinking… 0.0s</span>';
     $id('aiMessages').appendChild(think); think.scrollIntoView({ block: 'end' });
     timer = setInterval(() => { think.lastElementChild.textContent = 'Thinking… ' + aiFmt((performance.now() - T0) / 1000); }, 100);
     const payload = { max_tokens: 3000, system, messages: aiHistory.slice(-12).concat([{ role: 'user', content: blocks }]) };
-    if (JSON.stringify(payload).length > 4200000) throw new Error('Attachments are too large (about 4 MB total max). Remove a file or attach fewer pages.');
+    const sz = JSON.stringify(payload).length; if (sz > 4200000) { const er = new Error('Attachments are too large: ' + (sz / 1048576).toFixed(1) + ' MB, but the server accepts about 4 MB per message. Remove a file, attach fewer photos, or ask about the folder in two parts.'); er.detail = 'Request size: ' + Math.round(sz / 1024) + ' KB\nFiles: ' + names.join(', '); throw er; }
     const data = await callAI(payload); lap('AI model reasoned and wrote the answer');
     clearInterval(timer); think.remove(); think = null;
     const raw = aiTextFrom(data) || 'Sorry, I could not get an answer. Please try again.';
@@ -2316,7 +2360,7 @@ async function sendAI() {
       actions.push({ type: 'generate_image', prompt: shownQ.slice(0, 300) + (/diagram|illustration/i.test(shownQ) ? ', clean labelled educational illustration, white background' : '') });
     aiHistory.push({ role: 'user', content: (shownQ || '(attachment)') + (names.length ? '\n[attached: ' + names.join(', ') + ']' : '') }, { role: 'assistant', content: text || '(done)' });
     if (aiHistory.length > 24) aiHistory = aiHistory.slice(-24);
-    const snap = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('sn_') && !k.includes('aichat_')) snap[k] = localStorage.getItem(k); }
+    const snap = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('sn_') && !k.includes('aichat')) snap[k] = localStorage.getItem(k); }
     const done = [], media = []; let nav = null;
     for (const a of actions.slice(0, 12)) {
       if (!a || !a.type) continue;
@@ -2328,7 +2372,7 @@ async function sendAI() {
     if (done.length) lap('Applied ' + done.length + ' change' + (done.length > 1 ? 's' : '') + ' to your app');
     if (media.length) lap('Started ' + media.length + ' image/video generation' + (media.length > 1 ? 's' : ''));
     const undo = {}; Object.keys(snap).forEach(k => { if (localStorage.getItem(k) !== snap[k]) undo[k] = snap[k]; });
-    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('sn_') && !k.includes('aichat_') && !(k in snap)) undo[k] = null; }
+    for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('sn_') && !k.includes('aichat') && !(k in snap)) undo[k] = null; }
     aiUndo = done.length && Object.keys(undo).length ? undo : null;
     aiPush({ k: 'ai', text: text || (done.length || media.length ? 'Done.' : '…'), meta: { total: (performance.now() - T0) / 1000, steps } });
     if (done.length) { aiRefreshViews(); aiPush({ k: 'applied', items: done }); }
@@ -2336,7 +2380,7 @@ async function sendAI() {
     if (nav) setTimeout(() => aiGoto(nav.page, nav), 1200);
   } catch (e) {
     if (think) think.remove();
-    aiDraw({ k: 'error', text: e.message || 'Connection error. Please try again.' }, true);
+    aiDraw({ k: 'error', text: e.message || 'Connection error. Please try again.', detail: e.detail || (e.stack ? String(e.stack).split('\n').slice(0, 3).join('\n') : '') }, true);
   } finally { if (timer) clearInterval(timer); aiBusy = false; }
 }
 function aiUndoLast(btn) {

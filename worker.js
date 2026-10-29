@@ -172,7 +172,11 @@ export default {
   async fetch(request, env) {
     const url = new URL(request.url);
     if (url.pathname === '/api/ai') return handleAI(request, env);
-    if (env.ASSETS) return env.ASSETS.fetch(request);
+    if (env.ASSETS) {
+      const r = await env.ASSETS.fetch(request);
+      if (r.status === 404 && request.method === 'GET') return env.ASSETS.fetch(new Request(new URL('/index.html', request.url), request));
+      return r;
+    }
     return new Response('Not found', { status: 404 });
   }
 };
