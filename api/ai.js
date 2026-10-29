@@ -107,6 +107,7 @@ async function route(payload, E) {
     try { const r = await t.fn(); if (r && r.status === 200) return r; if (r) errors.push(r.error); } catch (e) { errors.push(t.name + ': could not reach the service'); }
   }
   const real = errors.filter(Boolean);
+  if (!k.anthropic && !k.gemini) real.unshift('No Anthropic or Gemini key reached the server, so images, PDFs and the full AI are off. Add ANTHROPIC_API_KEY or GEMINI_API_KEY in Vercel > Settings > Environment Variables (tick Production), then Redeploy. GitHub secrets do not count. Open /api/ai on your site to check.');
   return { status: 502, body: { error: { message: real.join(' | ') || 'AI request failed.' } } };
 }
 function diag(E) { const k = getKeys(E); return { anthropic_key_found: !!k.anthropic, gemini_key_found: !!k.gemini, provider_override: k.provider || null, env_names_seen: Object.keys(E || {}).filter(n => typeof E[n] === 'string' && /KEY|MODEL|PROVIDER/i.test(n)) }; }
