@@ -2096,7 +2096,7 @@ async function aiAttachFolder(kind, subject, folder) {
   for (const it of folder.images) {
     if (aiPending.length >= 6) break;
     const t = itemType(it), nm = (it.label || it.name || folder.name);
-    if (t.startsWith('image/') && imgs < 4) { const d = await itemToAIDataURL(it, 1400, 0.8); if (d) { aiPending.push({ kind: 'image', name: nm, data: d, auto: true, folder: folder.id }); imgs++; n++; } }
+    if (t.startsWith('image/') && imgs < 6) { const d = await itemToAIDataURL(it, 1400, 0.8); if (d) { aiPending.push({ kind: 'image', name: nm, data: d, auto: true, folder: folder.id }); imgs++; n++; } }
     else if (t === 'application/pdf') { const b = await itemToBlob(it); if (b && b.size < 3 * 1024 * 1024) { aiPending.push({ kind: 'pdf', name: nm, data: await aiReadDataURL(b), auto: true, folder: folder.id }); n++; } else showToast(nm + ' is over 3 MB — skipped'); }
     else if (it.text) { aiPending.push({ kind: 'text', name: nm, text: it.text, auto: true, folder: folder.id }); n++; }
   }
