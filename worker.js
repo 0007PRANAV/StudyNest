@@ -3,9 +3,9 @@ const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
 const POLLINATIONS_URL = 'https://text.pollinations.ai/openai';
 const ANTHROPIC_MODELS = ['claude-sonnet-5-5', 'claude-haiku-5-5'];
 const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
-const OPENROUTER_MODELS = ['google/gemini-2.5-flash', 'openai/gpt-4o-mini'];
+const OPENROUTER_MODELS = ['google/gemini-2.0-flash-exp:free', 'qwen/qwen2.5-vl-72b-instruct:free', 'meta-llama/llama-3.3-70b-instruct:free'];  // free models only (no charges)
 const VERTEX_URL = 'https://aiplatform.googleapis.com/v1/publishers/google/models/';
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.0-flash', 'gemini-3.8-flash'];
+const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash'];  // free-tier quotas are per model, so falling back to the next one helps
 
 const clampMaxTokens = v => Math.min(Math.max(parseInt(v, 10) || 1000, 1), 4000);
 const errMsg = (d, fb) => String((d && d.error && (d.error.message || d.error)) || fb);
@@ -83,34 +83,42 @@ function toGeminiContents(messages, camel) {
   }
   return contents;
 }
+function geminiBody(payload, vx, tools) {
+  const b = { contents: toGeminiContents(payload.messages, vx), generationConfig: { maxOutputTokens: clampMaxTokens(payload.max_tokens) } };
+  if (payload.system) b[vx ? 'systemInstruction' : 'system_instruction'] = { parts: [{ text: String(payload.system) }] };
+  if (tools) b.tools = [vx ? { googleSearch: {} } : { google_search: {} }];   // Google Search grounding (live web results + sources)
+  return b;
+}
+function gemSources(cd) {
+  const out = [], seen = new Set();
+  for (const ch of ((cd && cd.groundingMetadata && cd.groundingMetadata.groundingChunks) || [])) {
+    const w = ch && ch.web; if (w && w.uri && !seen.has(w.uri)) { seen.add(w.uri); out.push({ title: w.title || w.uri, url: w.uri }); }
+  }
+  return out.slice(0, 6);
+}
 async function callGemini(payload, keys, E) {
   const models = E.GEMINI_MODEL || E.AI_MODEL ? [cleanVal(E.GEMINI_MODEL || E.AI_MODEL)] : GEMINI_MODELS, errs = [];
   for (let ki = 0; ki < keys.length; ki++) {
-    // "AQ." keys are Vertex AI express-mode keys; "AIza" keys are Google AI Studio keys.
     if (isBad(keys[ki])) { errs.push('Gemini key ' + (ki + 1) + ' skipped: Google rejected it earlier. Replace it in Vercel and redeploy.'); continue; }
-    const endpoints = /^AQ\./.test(keys[ki]) ? ['vertex'] : ['studio'];
-    let done = false;
-    for (const ep of endpoints) {
-      if (done) break;
-      for (const model of models) {
-        const vx = ep === 'vertex', url = vx ? VERTEX_URL + encodeURIComponent(model) + ':generateContent' : GEMINI_URL + encodeURIComponent(model) + ':generateContent';
-        const body = { contents: toGeminiContents(payload.messages, vx), generationConfig: { maxOutputTokens: clampMaxTokens(payload.max_tokens) } };
-        if (payload.system) body[vx ? 'systemInstruction' : 'system_instruction'] = { parts: [{ text: String(payload.system) }] };
-        const r = await postJSON(url, { 'x-goog-api-key': keys[ki] }, body);
-        const tag = 'Gemini key ' + (ki + 1) + ' [' + (vx ? 'Vertex' : 'AI Studio') + ', ' + model + ']';
-        if (!r.ok) { noteBad(keys[ki], r); errs.push(tag + ': ' + errMsg(r.data, 'HTTP ' + r.status)); if (r.status !== 404) break; continue; }
-        const cd = r.data && r.data.candidates && r.data.candidates[0];
-        const answer = ((cd && cd.content && cd.content.parts) || []).filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('\n').trim();
-        if (answer) return { status: 200, body: { content: [{ type: 'text', text: answer }] } };
-        errs.push(tag + ' returned no text (' + ((cd && cd.finishReason) || (r.data && r.data.promptFeedback && r.data.promptFeedback.blockReason) || 'empty') + ').'); done = true; break;
+    const vx = /^AQ\./.test(keys[ki]);   // "AQ." keys are Vertex AI express keys; "AIza" keys are Google AI Studio keys
+    for (const model of models) {
+      const url = (vx ? VERTEX_URL : GEMINI_URL) + encodeURIComponent(model) + ':generateContent', tag = 'Gemini key ' + (ki + 1) + ' [' + (vx ? 'Vertex' : 'AI Studio') + ', ' + model + ']';
+      let r;
+      for (const tools of (payload.web ? [true, false] : [false])) {          // if the search tool is refused (400), retry without it
+        r = await postJSON(url, { 'x-goog-api-key': keys[ki] }, geminiBody(payload, vx, tools));
+        if (r.ok || r.status !== 400 || !tools) break;
       }
+      if (!r.ok) { noteBad(keys[ki], r); errs.push(tag + ': ' + errMsg(r.data, 'HTTP ' + r.status)); if ([404, 429, 503].includes(r.status)) continue; break; }
+      const cd = r.data && r.data.candidates && r.data.candidates[0];
+      const answer = ((cd && cd.content && cd.content.parts) || []).filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('\n').trim();
+      if (answer) return { status: 200, body: { content: [{ type: 'text', text: answer }], sources: gemSources(cd) } };
+      errs.push(tag + ' returned no text (' + ((cd && cd.finishReason) || (r.data && r.data.promptFeedback && r.data.promptFeedback.blockReason) || 'empty') + ').'); break;
     }
   }
   return { status: 502, error: errs.join(' | ') || 'No Gemini key available.' };
 }
 
-async function callOpenRouter(payload, key, E) {
-  const models = E.OPENROUTER_MODEL ? [cleanVal(E.OPENROUTER_MODEL)] : OPENROUTER_MODELS;
+function toORMessages(payload) {
   const msgs = [];
   if (payload.system) msgs.push({ role: 'system', content: String(payload.system) });
   for (const m of payload.messages) {
@@ -126,6 +134,12 @@ async function callOpenRouter(payload, key, E) {
     }
     if (parts.length) msgs.push({ role, content: parts });
   }
+  return msgs;
+}
+
+async function callOpenRouter(payload, key, E) {
+  const models = E.OPENROUTER_MODEL ? [cleanVal(E.OPENROUTER_MODEL)] : OPENROUTER_MODELS;
+  const msgs = toORMessages(payload);
   let last;
   if (isBad(key)) return { status: 401, error: 'OpenRouter key skipped: it was rejected earlier (User not found). Replace it in Vercel and redeploy.' };
   for (const model of models) {
@@ -157,15 +171,139 @@ async function callPollinations(payload) {
   return a ? { status: 200, body: { content: [{ type: 'text', text: a }], provider: 'pollinations' } } : { status: 502, error: 'Free AI returned an empty response.' };
 }
 
+const lastUserText = payload => {
+  const m = [...(payload.messages || [])].reverse().find(x => x && x.role === 'user'); if (!m) return '';
+  return typeof m.content === 'string' ? m.content : (m.content || []).filter(b => b && b.type === 'text').map(b => b.text).join(' ');
+};
+// Free, keyless web context from Wikipedia (used when the chosen model has no built-in web search).
+async function wikiContext(q) {
+  q = String(q || '').replace(/\s+/g, ' ').trim().slice(0, 200); if (!q) return null;
+  const url = 'https://en.wikipedia.org/w/api.php?action=query&generator=search&gsrlimit=3&prop=extracts%7Cinfo&exintro=1&explaintext=1&exchars=1000&inprop=url&format=json&formatversion=2&origin=*&gsrsearch=' + encodeURIComponent(q);
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), 6000);
+  try {
+    const r = await fetch(url, { headers: { 'user-agent': 'StudyNest/1.0 (https://github.com/0007PRANAV/StudyNest)' }, signal: ac.signal });
+    if (!r.ok) return null;
+    const d = await r.json(), pages = (((d || {}).query || {}).pages || []).filter(p => p && p.extract).sort((a, b) => (a.index || 0) - (b.index || 0));
+    if (!pages.length) return null;
+    return { sources: pages.map(p => ({ title: p.title, url: p.fullurl })), text: pages.map(p => '[' + p.title + '] (' + p.fullurl + ')\n' + p.extract).join('\n\n') };
+  } catch (e) { return null; } finally { clearTimeout(t); }
+}
+async function withWeb(payload) {
+  if (!payload.web) return { p: payload, sources: null };
+  const w = await wikiContext(lastUserText(payload));
+  return w ? { p: Object.assign({}, payload, { system: (payload.system || '') + '\n\nWEB RESULTS (Wikipedia). Use them when relevant and mention the article title:\n' + w.text }), sources: w.sources } : { p: payload, sources: null };
+}
+
+// ---- streaming (Server-Sent Events) ----
+async function readSSE(resp, onData) {
+  const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = '';
+  for (;;) {
+    const { done, value } = await reader.read(); if (done) break;
+    buf += dec.decode(value, { stream: true });
+    let i;
+    while ((i = buf.search(/\r?\n\r?\n/)) >= 0) {
+      const block = buf.slice(0, i); buf = buf.slice(i).replace(/^\r?\n\r?\n/, '');
+      const line = block.split(/\r?\n/).filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join('');
+      if (line === '[DONE]') return;
+      if (line) { try { onData(JSON.parse(line)); } catch (e) {} }
+    }
+  }
+}
+async function openStream(url, headers, body, ms) {
+  const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms || 50000);
+  try {
+    const resp = await fetch(url, { method: 'POST', headers: Object.assign({ 'content-type': 'application/json' }, headers), body: JSON.stringify(body), signal: ac.signal });
+    if (!resp.ok) { const text = await resp.text(); let data = null; try { data = JSON.parse(text); } catch (e) {} clearTimeout(t); return { ok: false, status: resp.status, data, text }; }
+    return { ok: true, resp, done: () => clearTimeout(t) };
+  } catch (e) { clearTimeout(t); return { ok: false, status: 599, data: { error: { message: e && e.name === 'AbortError' ? 'timed out' : 'network error' } }, text: '' }; }
+}
+async function streamGemini(payload, keys, E, sink) {
+  const models = E.GEMINI_MODEL || E.AI_MODEL ? [cleanVal(E.GEMINI_MODEL || E.AI_MODEL)] : GEMINI_MODELS, errs = [];
+  for (let ki = 0; ki < keys.length; ki++) {
+    if (isBad(keys[ki])) { errs.push('Gemini key ' + (ki + 1) + ' skipped: Google rejected it earlier.'); continue; }
+    const vx = /^AQ\./.test(keys[ki]);
+    for (const model of models) {
+      const url = (vx ? VERTEX_URL : GEMINI_URL) + encodeURIComponent(model) + ':streamGenerateContent?alt=sse', tag = 'Gemini key ' + (ki + 1) + ' [' + (vx ? 'Vertex' : 'AI Studio') + ', ' + model + ']';
+      let o;
+      for (const tools of (payload.web ? [true, false] : [false])) {
+        o = await openStream(url, { 'x-goog-api-key': keys[ki] }, geminiBody(payload, vx, tools));
+        if (o.ok || o.status !== 400 || !tools) break;
+      }
+      if (!o.ok) { noteBad(keys[ki], o); errs.push(tag + ': ' + errMsg(o.data, 'HTTP ' + o.status)); if ([404, 429, 503].includes(o.status)) continue; break; }
+      let any = false, sources = [];
+      try {
+        await readSSE(o.resp, d => {
+          const cd = d.candidates && d.candidates[0]; if (!cd) return;
+          const s = gemSources(cd); if (s.length) sources = s;
+          for (const p of ((cd.content && cd.content.parts) || [])) if (p && !p.thought && typeof p.text === 'string' && p.text) { any = true; sink.send({ t: p.text }); }
+        });
+      } catch (e) { o.done(); if (any) return { done: true, interrupted: true, sources }; errs.push(tag + ': stream failed'); break; }
+      o.done();
+      if (any) return { done: true, sources };
+      errs.push(tag + ' returned no text'); break;
+    }
+  }
+  return { error: errs.join(' | ') || 'No Gemini key available.' };
+}
+async function streamOpenRouter(payload, key, E, sink, sources) {
+  if (isBad(key)) return { error: 'OpenRouter key skipped: it was rejected earlier.' };
+  const models = E.OPENROUTER_MODEL ? [cleanVal(E.OPENROUTER_MODEL)] : OPENROUTER_MODELS; let last = 'OpenRouter failed';
+  for (const model of models) {
+    const o = await openStream(OPENROUTER_URL, { authorization: 'Bearer ' + key, 'x-title': 'StudyNest' }, { model, stream: true, messages: toORMessages(payload), max_tokens: clampMaxTokens(payload.max_tokens) });
+    if (!o.ok) { noteBad(key, o); last = 'OpenRouter (' + model + '): ' + errMsg(o.data, 'HTTP ' + o.status); if ([400, 404, 429, 503].includes(o.status)) continue; break; }
+    let any = false;
+    try { await readSSE(o.resp, d => { const t = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content; if (typeof t === 'string' && t) { any = true; sink.send({ t }); } }); }
+    catch (e) { o.done(); if (any) return { done: true, interrupted: true, sources }; last = 'OpenRouter (' + model + '): stream failed'; continue; }
+    o.done(); if (any) return { done: true, sources }; last = 'OpenRouter (' + model + '): empty response';
+  }
+  return { error: last };
+}
+// Streams the answer when possible; otherwise returns the normal JSON result (null = already streamed).
+async function routeStream(payload, E, sink) {
+  const k = getKeys(E), errors = [], t0 = Date.now();
+  for (const p of (k.provider === 'openrouter' ? ['openrouter', 'gemini'] : ['gemini', 'openrouter'])) {
+    if (Date.now() - t0 > 35000) break;
+    let r;
+    if (p === 'gemini' && k.gemini.length) r = await streamGemini(payload, k.gemini, E, sink);
+    else if (p === 'openrouter' && k.openrouter) { const w = await withWeb(payload); r = await streamOpenRouter(w.p, k.openrouter, E, sink, w.sources); }
+    else continue;
+    if (r.done) { sink.send({ done: true, sources: r.sources || [], interrupted: !!r.interrupted }); return null; }
+    errors.push(r.error);
+  }
+  const fb = await route(payload, E, ['gemini', 'openrouter']);
+  if (fb.status !== 200) fb.body.error.message = errors.concat(fb.body.error.message).filter(Boolean).join(' | ');
+  return fb;
+}
+
+// ---- abuse protection (best effort; limits are per server instance) ----
+const HITS = new Map();
+function guard(info, E, kind) {
+  if (kind === 'post') {
+    const allowed = String(E.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
+    let h = ''; try { h = new URL(info.origin).host; } catch (e) {}
+    if (!info.origin) return { status: 403, msg: 'Please use the StudyNest app to chat with the AI.' };
+    if (h !== info.host && !allowed.includes(info.origin) && !/^(localhost|127\.0\.0\.1)(:\d+)?$/.test(h)) return { status: 403, msg: 'This website is not allowed to use the StudyNest AI.' };
+  }
+  const now = Date.now(), id = info.ip || 'unknown'; let s = HITS.get(id);
+  if (!s || now - s.t > 86400000) s = { t: now, day: 0, m: [] };
+  s.m = s.m.filter(x => now - x < 60000);
+  if (s.m.length >= (kind === 'post' ? 15 : 6)) return { status: 429, msg: 'Too many requests. Please wait a minute and try again.' };
+  if (s.day >= 400) return { status: 429, msg: 'Daily AI limit reached for this connection. Try again tomorrow.' };
+  s.m.push(now); s.day++; HITS.set(id, s); if (HITS.size > 5000) HITS.clear();
+  return null;
+}
+
 // Tries every configured provider in order; returns first success, otherwise all the errors.
-async function route(payload, E) {
-  const k = getKeys(E), tries = [], add = (n, fn) => tries.push({ name: n, fn });
-  const A = () => k.anthropic && add('anthropic', () => callAnthropic(payload, k.anthropic, E));
+async function route(payload, E, skip) {
+  skip = skip || [];
+  const k = getKeys(E), tries = [], add = (n, fn) => { if (!skip.includes(n)) tries.push({ name: n, fn }); };
+  const viaWeb = fn => async () => { const w = await withWeb(payload), r = await fn(w.p); if (r && r.status === 200 && w.sources) r.body.sources = w.sources; return r; };
+  const A = () => k.anthropic && add('anthropic', viaWeb(p => callAnthropic(p, k.anthropic, E)));
   const G = () => k.gemini.length && add('gemini', () => callGemini(payload, k.gemini, E));
-  const O = () => k.openrouter && add('openrouter', () => callOpenRouter(payload, k.openrouter, E));
+  const O = () => k.openrouter && add('openrouter', viaWeb(p => callOpenRouter(p, k.openrouter, E)));
   const order = { gemini: [G, A, O], openrouter: [O, G, A] }[k.provider] || [A, G, O];
   order.forEach(f => f());
-  add('free', () => callPollinations(payload));
+  add('free', viaWeb(p => callPollinations(p)));
   const errors = [], t0 = Date.now();
   for (const t of tries) {
     if (Date.now() - t0 > 42000) { errors.push(t.name + ': skipped (out of time)'); continue; }
@@ -189,17 +327,24 @@ async function selfTest(E) {
 function validate(payload) {
   if (!payload || typeof payload !== 'object') return 'Invalid JSON body.';
   if (!Array.isArray(payload.messages) || !payload.messages.length) return 'A non-empty messages array is required.';
+  if (payload.messages.length > 40) return 'Too many messages in one request.';
+  if (payload.messages.some(m => !m || !['user', 'assistant'].includes(m.role))) return 'Invalid message role.';
+  if (payload.system && String(payload.system).length > 40000) return 'System prompt is too long.';
   return '';
 }
 
-const J = (b, s, extra) => new Response(JSON.stringify(b), { status: s || 200, headers: Object.assign({ 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'access-control-allow-origin': '*' }, extra) });
+const J = (b, s, extra) => new Response(JSON.stringify(b), { status: s || 200, headers: Object.assign({ 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store',  }, extra) });
 async function handleAI(request, env) {
-  if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET, POST, OPTIONS', 'access-control-allow-headers': 'content-type' } });
+  const h = request.headers, info = { origin: h.get('origin') || '', host: new URL(request.url).host, ip: (h.get('cf-connecting-ip') || '').trim() };
+  if (request.method === 'OPTIONS') return new Response(null, { status: 204 });
+  const g = guard(info, env, request.method === 'POST' ? 'post' : 'get');
+  if (request.method === 'GET' || request.method === 'POST') { if (g) return J({ error: { message: g.msg } }, g.status); }
   if (request.method === 'GET') return J(new URL(request.url).searchParams.get('test') === '1' ? Object.assign(diag(env), { test: await selfTest(env) }) : diag(env));
   if (request.method !== 'POST') return J({ error: { message: 'Use POST for this endpoint.' } }, 405);
   let payload; try { payload = await request.json(); } catch (e) { payload = null; }
   const bad = validate(payload);
   if (bad) return J({ error: { message: bad } }, 400);
+  delete payload.stream;   // the Cloudflare worker answers in one piece
   const result = await route(payload, env);
   return J(result.body, result.status);
 }

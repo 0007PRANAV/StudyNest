@@ -4,6 +4,11 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>StudyNest</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<meta name="theme-color" content="#0f0f1a">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="StudyNest">
 <style>
   :root {
     --bg: #0f0f1a;
@@ -297,6 +302,8 @@
   .chat-emoji { flex-wrap: wrap; gap: 4px; padding: 8px; border-top: 1px solid var(--border); max-height: 120px; overflow: auto; } .chat-emoji span { font-size: 1.4rem; cursor: pointer; padding: 2px 4px; }
   .chat-bar { display: flex; justify-content: space-between; gap: 8px; align-items: center; background: rgba(0,0,0,.2); border-left: 3px solid var(--accent); padding: 6px 10px; border-radius: 8px; margin-top: 8px; font-size: .78rem; }
   .unread-badge { background: var(--accent); color: #000; border-radius: 10px; min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: .7rem; font-weight: 700; padding: 0 6px; }
+  .ai-src { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); font-size: .74rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+  .ai-src span { color: var(--muted); } .ai-src a { color: var(--accent); background: rgba(0,245,200,.08); padding: 3px 9px; border-radius: 10px; text-decoration: none; }
 </style>
 </head>
 <body>
@@ -432,6 +439,7 @@
         <button class="ai-tool-btn" title="Attach from my notes" onclick="aiPickFromApp()">🗂️</button>
         <button class="ai-tool-btn" id="aiBtnImg" title="Generate image" onclick="aiSetMode('image')">🎨</button>
         <button class="ai-tool-btn" id="aiBtnVid" title="Generate video" onclick="aiSetMode('video')">🎬</button>
+        <button class="ai-tool-btn" id="aiBtnWeb" title="Search the web for answers" onclick="aiToggleWeb()">🌐</button>
         <button class="btn btn-accent" style="flex:1;" onclick="sendAI()">Send ✨</button>
       </div>
     </div>
@@ -896,7 +904,7 @@ function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '
 function detectMime(dataUrl) { const m = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,/i); return m ? m[1] : 'image/jpeg'; }
 
 // Calls the Worker AI proxy at /api/ai. The Anthropic API key stays on the server.
-async function callAI(payload) {
+async function callAI(payload, onDelta) {
   const body = JSON.stringify(payload), kb = Math.round(body.length / 1024);
   const fail = (msg, detail) => { const er = new Error(msg); er.detail = detail; return er; };
   let resp;
@@ -904,6 +912,25 @@ async function callAI(payload) {
     resp = await fetch('/api/ai', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body });
   } catch (e) {
     throw fail('Could not reach the AI server. Check your internet connection' + (kb > 3000 ? ' (this request is also very large, ' + kb + ' KB, which can make the connection fail).' : '.'), 'Network error: ' + (e && e.message) + '\nRequest size: ' + kb + ' KB');
+  }
+  if (resp.ok && onDelta && resp.headers && /event-stream/.test(resp.headers.get('content-type') || '')) {
+    let text = '', sources = [], err = null;
+    try {
+      const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = '';
+      for (;;) {
+        const { done, value } = await reader.read(); if (done) break;
+        buf += dec.decode(value, { stream: true }); let i;
+        while ((i = buf.search(/\r?\n\r?\n/)) >= 0) {
+          const blk = buf.slice(0, i); buf = buf.slice(i).replace(/^\r?\n\r?\n/, '');
+          const ln = blk.split(/\r?\n/).filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join(''); if (!ln) continue;
+          let d; try { d = JSON.parse(ln); } catch (e) { continue; }
+          if (d.t) { text += d.t; onDelta(text); } if (d.sources) sources = d.sources; if (d.error) err = d.error;
+        }
+      }
+    } catch (e) { if (!text) throw fail('The connection dropped before the AI answered.', 'Stream error: ' + (e && e.message) + '\nRequest size: ' + kb + ' KB'); err = err || 'cut off'; }
+    if (!text) throw fail(err || 'The AI returned an empty answer.', 'Empty stream. Request size: ' + kb + ' KB');
+    if (err) text += '\n\n*(The reply was cut off by a connection problem. Ask me to continue.)*';
+    return { content: [{ type: 'text', text }], sources };
   }
   let data = null;
   const raw = await resp.text();
@@ -1662,7 +1689,7 @@ function renderTimetable() {
     const isToday = day === today;
     html += `<div class="tt-day"><div class="tt-day-label" style="${isToday?'color:var(--accent);':'color:var(--muted);'}">${isToday?'▶ ':''} ${day}${isToday?' (Today)':''}</div>`;
     (tt[day]||[]).forEach(s => {
-      html += `<div class="tt-slot"><div class="tt-time">${s.time}</div><div class="tt-subj">${s.subj}</div><div class="tt-room">${s.room}</div></div>`;
+      html += `<div class="tt-slot"><div class="tt-time">${escapeHtml(s.time)}</div><div class="tt-subj">${escapeHtml(s.subj)}</div><div class="tt-room">${escapeHtml(s.room)}</div></div>`;
     });
     html += `</div>`;
   });
@@ -1698,7 +1725,7 @@ function renderHomework() {
   if (!hw.length) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><p>No homework! Enjoy your free time.</p></div>`; return; }
   list.innerHTML = hw.map(h => `<div class="hw-item">
     <div class="hw-check ${h.done?'done':''}" onclick="toggleHW(${h.id})">${h.done?'✓':''}</div>
-    <div class="user-info"><div class="hw-text ${h.done?'done':''}">${h.text}</div><div class="hw-subject">${subjEmoji[h.subj]||'📌'} ${h.subj}</div></div>
+    <div class="user-info"><div class="hw-text ${h.done?'done':''}">${escapeHtml(h.text)}</div><div class="hw-subject">${subjEmoji[h.subj]||'📌'} ${h.subj}</div></div>
     <span class="hw-del" onclick="deleteHW(${h.id})">🗑️</span>
   </div>`).join('');
 }
@@ -2083,6 +2110,7 @@ function aiShowChat() {
   if (m.lastElementChild) setTimeout(() => m.lastElementChild.scrollIntoView({ block: 'end' }), 50);
 }
 function aiOpen() {
+  aiWebBtn();
   if (aiLoadedFor !== currentUser.username) { aiLoadedFor = currentUser.username; aiStore = aiLoadStore(); aiShowChat(); }
   aiWelcome();
 }
@@ -2116,6 +2144,10 @@ function aiWelcome() {
   const qs = ['Summarize my notes', 'What homework is pending?', 'Quiz me from my notes', 'Plan my study week', 'Draw a diagram of the water cycle'];
   m.insertAdjacentHTML('afterbegin', `<div id="aiWelcomeBox" class="ai-bubble"><div class="ai-md"><p><b>Hi ${escapeHtml(currentUser.name.split(' ')[0])}, I'm your StudyNest AI.</b></p><p>I can read your notes, question papers, timetable, homework, seats and announcements, and change them when you ask. Use 📎 to attach files, 🗂️ to attach a notes folder, 🎨 for images and 🎬 for videos.</p></div><div class="ai-action-row">${qs.map(x => `<button class="ai-mini-btn" onclick="aiQuick(this.textContent)">${x}</button>`).join('')}</div></div>`);
 }
+let aiWeb = false; try { aiWeb = !!storeGet('aiweb'); } catch (e) {}
+function aiWebBtn() { const b = $id('aiBtnWeb'); if (b) b.classList.toggle('on', aiWeb); }
+function aiToggleWeb() { aiWeb = !aiWeb; try { storeSet('aiweb', aiWeb); } catch (e) {} aiWebBtn(); showToast(aiWeb ? '🌐 Web search is on: answers can use the internet and show sources' : 'Web search is off'); }
+let aiRaf = 0;
 function aiQuick(t) { $id('aiInput').value = t; sendAI(); }
 const aiFmt = s => s < 10 ? s.toFixed(1) + 's' : Math.round(s) + 's';
 
@@ -2153,7 +2185,7 @@ function aiDraw(e, live) {
     el.className = 'ai-user'; el.innerHTML = escapeHtml(e.text || '') + ((e.files || []).length ? '<div style="margin-top:6px;font-size:.72rem;color:var(--muted);">📎 ' + escapeHtml(e.files.join(', ')) + '</div>' : '');
   } else if (e.k === 'ai') {
     el.className = 'ai-bubble';
-    const mt = e.meta; el.innerHTML = (mt ? `<details class="ai-think"><summary>⏱ Thought for ${aiFmt(mt.total)}</summary><ol>${mt.steps.map(s => `<li>${escapeHtml(s[0])} <span>${aiFmt(s[1])}</span></li>`).join('')}</ol></details>` : '') + '<div class="ai-md">' + aiMd(e.text) + '</div>';
+    const mt = e.meta; el.innerHTML = (mt ? `<details class="ai-think"><summary>⏱ Thought for ${aiFmt(mt.total)}</summary><ol>${mt.steps.map(s => `<li>${escapeHtml(s[0])} <span>${aiFmt(s[1])}</span></li>`).join('')}</ol></details>` : '') + '<div class="ai-md">' + aiMd(e.text) + '</div>' + ((e.sources || []).length ? '<div class="ai-src"><span>🌐 Sources</span>' + e.sources.map(s => '<a href="' + String(s.url).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(aiClip(s.title, 48)) + '</a>').join('') + '</div>' : '');
   } else if (e.k === 'applied') {
     el.className = 'ai-bubble'; el.style.borderLeftColor = 'var(--success)';
     el.innerHTML = '<div class="ai-result-label">Applied to your app</div>' + e.items.map(d => '<div>' + escapeHtml(d) + '</div>').join('') + (live && aiUndo ? '<div class="ai-action-row"><button class="ai-mini-btn" onclick="aiUndoLast(this)">↩️ Undo</button></div>' : '');
@@ -2171,17 +2203,20 @@ function aiDraw(e, live) {
 function aiPush(e) { aiLog.push(e); aiSave(); return aiDraw(e, true); }
 
 // ---- Snapshot of every section (sent to the AI with each message) ----
-function aiSnapshot() {
-  const u = currentUser, L = [];
+function aiSnapshot(q) {
+  const u = currentUser, L = [], ql = String(q || '').toLowerCase();
+  const has = re => re.test(ql), folderHit = ['notes', 'qp'].some(k => AI_SUBJECTS.some(s => getFolders(k, s).some(f => f.name.length >= 3 && ql.includes(f.name.toLowerCase()))));
+  // Only send the detailed file list when the question is about notes/papers; otherwise just folder names (much smaller and faster).
+  const deep = folderHit || has(/note|paper|qp|folder|chapter|summar|quiz|test|exam|revis|explain|photo|image|pdf|file|handwrit|label|star|save|this|these|teach|doubt|solve|question|answer|topic|lesson|study/);
   L.push(`USER: ${u.name} (@${u.username}), role=${u.role || 'student'}, age=${u.age || '?'}. Today: ${new Date().toDateString()}.`);
   ['notes', 'qp'].forEach(kind => {
     L.push(kind === 'qp' ? 'QUESTION PAPERS (kind=qp):' : 'NOTES (kind=notes):');
     AI_SUBJECTS.forEach(s => {
       const fs = getFolders(kind, s);
-      if (!fs.length) { L.push(` ${s}: no folders`); return; }
+      if (!fs.length) return;
       fs.forEach(f => {
         L.push(` ${s} > folder "${f.name}" (${f.images.length} files)`);
-        f.images.forEach((it, i) => {
+        if (deep) f.images.forEach((it, i) => {
           const extra = it.text ? ` text:"${aiClip(it.text, 400)}"` : (it.aiSummary ? ` summary:"${aiClip(it.aiSummary, 300)}"` : (it.aiHandwriting ? ` transcript:"${aiClip(it.aiHandwriting, 300)}"` : ''));
           L.push(`   #${i} "${it.label || it.name || 'file'}" ${itemType(it)}${it.important ? ' ⭐' : ''}${extra}`);
         });
@@ -2192,17 +2227,19 @@ function aiSnapshot() {
   const hw = storeGet('hw_' + u.username) || [];
   L.push('HOMEWORK: ' + (hw.length ? hw.map(h => `[id=${h.id}] ${h.subj}: ${aiClip(h.text, 120)} ${h.done ? '(done)' : '(pending)'}`).join(' | ') : 'none'));
   const users = storeGet('users') || {};
-  const seats = storeGet('seats_' + getSeatDay().dayNum) || {};
-  const mine = Object.keys(seats).find(k => seats[k] === u.username);
-  L.push(`SEATING today: ${Object.keys(seats).length} of ${SEAT_ROWS * SEAT_COLS} taken; your seat: ${mine ? 'R' + (+mine.split('_')[0] + 1) + 'C' + (+mine.split('_')[1] + 1) : 'none'}`);
-  const anns = (storeGet('announcements') || []).slice(-5);
-  L.push('ANNOUNCEMENTS: ' + (anns.length ? anns.map(a => `"${aiClip(a.title, 60)}": ${aiClip(a.body, 160)}`).join(' | ') : 'none'));
-  const me = users[u.username] || {};
-  L.push('FRIENDS: ' + ((me.friends || []).map(f => users[f] ? users[f].name : f).join(', ') || 'none'));
+  if (has(/seat|sit|row|desk/)) {
+    const seats = storeGet('seats_' + getSeatDay().dayNum) || {}, mine = Object.keys(seats).find(k => seats[k] === u.username);
+    L.push(`SEATING today: ${Object.keys(seats).length} of ${SEAT_ROWS * SEAT_COLS} taken; your seat: ${mine ? 'R' + (+mine.split('_')[0] + 1) + 'C' + (+mine.split('_')[1] + 1) : 'none'}`);
+  }
+  if (has(/announce|notice|news|post|circular|update/)) {
+    const anns = (storeGet('announcements') || []).slice(-5);
+    L.push('ANNOUNCEMENTS: ' + (anns.length ? anns.map(a => `"${aiClip(a.title, 60)}": ${aiClip(a.body, 160)}`).join(' | ') : 'none'));
+  }
+  if (has(/friend|buddy|classmate|chat/)) { const me = users[u.username] || {}; L.push('FRIENDS: ' + ((me.friends || []).map(f => users[f] ? users[f].name : f).join(', ') || 'none')); }
+  L.push('(Seats, announcements and friends are only listed when the user asks about them.)');
   return L.join('\n').slice(0, 14000);
 }
-
-function aiSystem() {
+function aiSystem(q) {
   return `You are StudyNest AI, the tutor built into the StudyNest student app. Write like a clear, calm teacher, not like a chatbot.
 FORMAT: answer first; no filler openers ("Great question!") or closers. Short paragraphs. Use ## headings only when an answer has several parts. Use numbered lists for steps and bullets for points, **bold** for key terms, and markdown tables for comparisons. Use plain notation for science and maths (H₂O, x², √, →). At most one emoji per reply. Explain simply first, then add detail.
 IMAGES: when the user asks for an image, picture, diagram, illustration, poster or says "show me", include a generate_image action with a detailed English prompt (style: clean educational illustration, labelled where useful) and say in one line what it shows.
@@ -2223,7 +2260,7 @@ You can CHANGE the app. When (and only when) the user asks for a change, finish 
 {"type":"make_video","title":"..","scenes":[{"text":"caption (max 140 chars)","image_prompt":"detailed English image prompt"}]}  (4-6 scenes)
 Use ids/idx exactly as in APP DATA. You can't delete notes/files/folders; tell the user to do that with the 🗑️ buttons. For text notes, summaries and study material the user wants kept, use save_note.
 === APP DATA ===
-${aiSnapshot()}`;
+${aiSnapshot(q)}`;
 }
 
 // ---- Attachments ----
@@ -2451,7 +2488,7 @@ async function sendAI() {
     const names = aiPending.map(p => p.name);
     aiPush({ k: 'user', text: wantVideo ? '🎬 ' + (shownQ || 'Video from attachments') : (shownQ || '(attachment)'), files: names });
     if (names.length) lap('Loaded ' + names.length + ' attached file' + (names.length > 1 ? 's' : '') + (aiPending.some(p => p.auto) ? ' from your notes' : ''));
-    const system = aiSystem(); lap('Read your app data: notes, papers, timetable, homework, seating, announcements');
+    const system = aiSystem(q); lap('Read your app data: notes, papers, timetable, homework, seating, announcements');
     const blocks = aiPending.map(p => p.kind === 'image' ? { type: 'image', source: { type: 'base64', media_type: detectMime(p.data), data: p.data.split(',')[1] } }
       : p.kind === 'pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.data.split(',')[1] } }
       : { type: 'text', text: '[Attached file: ' + p.name + ']\n' + p.text });
@@ -2460,10 +2497,22 @@ async function sendAI() {
     think = document.createElement('div'); think.className = 'ai-thinking'; think.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div> <span>Thinking… 0.0s</span>';
     $id('aiMessages').appendChild(think); think.scrollIntoView({ block: 'end' });
     timer = setInterval(() => { think.lastElementChild.textContent = 'Thinking… ' + aiFmt((performance.now() - T0) / 1000); }, 100);
-    const payload = { max_tokens: 3000, system, messages: aiHistory.slice(-12).concat([{ role: 'user', content: blocks }]) };
+    const web = aiWeb || /\b(latest|news|currently|right now|up to date|202\d|search|google|online|look up|sources?|wikipedia|on the web|internet)\b/i.test(shownQ);
+    const payload = { max_tokens: 3000, stream: true, web, system, messages: aiHistory.slice(-12).concat([{ role: 'user', content: blocks }]) };
     const sz = JSON.stringify(payload).length; if (sz > 4200000) { const er = new Error('Attachments are too large: ' + (sz / 1048576).toFixed(1) + ' MB, but the server accepts about 4 MB per message. Remove a file, attach fewer photos, or ask about the folder in two parts.'); er.detail = 'Request size: ' + Math.round(sz / 1024) + ' KB\nFiles: ' + names.join(', '); throw er; }
-    const data = await callAI(payload); lap('AI model reasoned and wrote the answer');
-    clearInterval(timer); think.remove(); think = null;
+    let live = null, shown = '';
+    const onDelta = txt => {
+      if (!live) {
+        clearInterval(timer); if (think) { think.remove(); think = null; } lap('Waited for the first words' + (web ? ' (web search on)' : ''));
+        live = document.createElement('div'); live.className = 'ai-bubble'; live.innerHTML = '<div class="ai-md"></div>'; $id('aiMessages').appendChild(live);
+      }
+      shown = txt;
+      if (!aiRaf) aiRaf = requestAnimationFrame(() => { aiRaf = 0; const cut = shown.indexOf('<actions>'); live.firstChild.innerHTML = aiMd(cut >= 0 ? shown.slice(0, cut) : shown); live.scrollIntoView({ block: 'end' }); });
+    };
+    let data;
+    try { data = await callAI(payload, onDelta); } finally { if (aiRaf) { cancelAnimationFrame(aiRaf); aiRaf = 0; } if (live) live.remove(); }
+    lap(live ? 'Wrote the answer' : 'AI model reasoned and wrote the answer');
+    clearInterval(timer); if (think) { think.remove(); think = null; }
     const raw = aiTextFrom(data) || 'Sorry, I could not get an answer. Please try again.';
     let actions = []; const m = raw.match(/<actions>([\s\S]*?)<\/actions>/i);
     if (m) { try { const j = JSON.parse(m[1].trim().replace(/^```(?:json)?\s*|\s*```$/g, '')); actions = Array.isArray(j) ? j : [j]; } catch (e) {} }
@@ -2486,7 +2535,7 @@ async function sendAI() {
     const undo = {}; Object.keys(snap).forEach(k => { if (localStorage.getItem(k) !== snap[k]) undo[k] = snap[k]; });
     for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('sn_') && !k.includes('aichat') && !(k in snap)) undo[k] = null; }
     aiUndo = done.length && Object.keys(undo).length ? undo : null;
-    aiPush({ k: 'ai', text: text || (done.length || media.length ? 'Done.' : '…'), meta: { total: (performance.now() - T0) / 1000, steps } });
+    aiPush({ k: 'ai', text: text || (done.length || media.length ? 'Done.' : '…'), meta: { total: (performance.now() - T0) / 1000, steps }, sources: (data.sources || []).filter(s => s && /^https?:\/\//.test(s.url)).slice(0, 6) });
     if (done.length) { aiRefreshViews(); aiPush({ k: 'applied', items: done }); }
     media.forEach(fn => fn());
     if (nav) setTimeout(() => aiGoto(nav.page, nav), 1200);
@@ -2522,8 +2571,8 @@ function renderAnnouncements() {
   const anns = storeGet('announcements') || [];
   if (!anns.length) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">📢</div><p>No announcements yet.</p></div>`; return; }
   list.innerHTML = anns.slice().reverse().map((a,i) => `<div class="ann-item">
-    <div class="ann-title">${a.title}</div>
-    <div class="ann-body">${a.body}</div>
+    <div class="ann-title">${escapeHtml(a.title)}</div>
+    <div class="ann-body">${escapeHtml(a.body)}</div>
     <div class="ann-meta">Posted by ${a.by} · ${new Date(a.ts).toLocaleDateString()}
     ${isAdmin?` <span onclick="deleteAnn(${anns.length-1-i})" style="color:var(--danger);cursor:pointer;margin-left:10px;">Delete</span>`:''}</div>
   </div>`).join('');
@@ -2698,6 +2747,7 @@ function showToast(msg) {
 
 // ===== BOOT =====
 init();
+if ('serviceWorker' in navigator) window.addEventListener('load', () => navigator.serviceWorker.register('/sw.js').catch(() => {}));
 </script>
 </body>
 </html>
