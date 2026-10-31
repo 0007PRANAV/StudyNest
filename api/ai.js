@@ -6,7 +6,8 @@ const OPENROUTER_URL = 'https://openrouter.ai/api/v1/chat/completions';
 const OPENROUTER_MODELS_URL = 'https://openrouter.ai/api/v1/models';
 const OPENROUTER_FALLBACK = ['meta-llama/llama-3.3-70b-instruct:free', 'google/gemma-3-27b-it:free', 'openai/gpt-oss-20b:free', 'qwen/qwen3-235b-a22b:free', 'deepseek/deepseek-chat-v3.1:free'];  // only used if OpenRouter's live model list can't be fetched
 const VERTEX_URL = 'https://aiplatform.googleapis.com/v1/publishers/google/models/';
-const GEMINI_MODELS = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-2.0-flash', 'gemini-flash-latest'];  // free-tier quotas are per model, so falling back to the next one helps
+const GEMINI_FALLBACK = ['gemini-3.8-flash', 'gemini-3.5-flash-lite', 'gemini-flash-latest', 'gemini-flash-lite-latest', 'gemini-2.5-flash'];   // used only if Google's live model list can't be fetched
+const GEMINI_LIST_URL = 'https://generativelanguage.googleapis.com/v1beta/models?pageSize=200';  // free-tier quotas are per model, so falling back to the next one helps
 
 const clampMaxTokens = v => Math.min(Math.max(parseInt(v, 10) || 1000, 1), 4000);
 const errMsg = (d, fb) => String((d && d.error && (d.error.message || d.error)) || fb);
@@ -57,12 +58,25 @@ function noteFail(k, m, r) {
   if (st === 401 || /api key not valid|api_key_invalid|user not found|invalid api key|invalid_api_key/i.test(t)) { setCool(k, '*', 300000, 'rejected'); return 'auth'; }
   if (st === 403 && /has not been used|is disabled|service_disabled|not enabled|enable it by visiting/i.test(t)) { setCool(k, '*', 300000, 'api-disabled'); return 'disabled'; }
   if (st === 429 || /resource_exhausted|quota|rate.?limit/i.test(t)) { setCool(k, m, /per ?day|daily/i.test(t) ? 900000 : Math.min(Math.max((r.retry || 0) * 1000, 45000), 180000), 'quota'); return 'quota'; }
-  if (st === 404 || /unavailable for free|no endpoints found|not a valid model|model.{0,30}not found|is not found/i.test(t)) { setCool(k, m, 3600000, 'model'); return 'model'; }
+  if (st === 404 || /unavailable for free|no endpoints found|not a valid model|model.{0,30}not found|is not found|no longer available|deprecated|only available on|agentic/i.test(t)) { setCool(k, m, 3600000, 'model'); return 'model'; }
   return 'other';
 }
 const hint = (kind, vx) => kind === 'disabled' && vx ? ' → This "AQ." key comes from a Google Cloud project where the Vertex AI API is switched off. Enable it in Google Cloud, or (easier, free) create a Google AI Studio key at aistudio.google.com/apikey (starts with "AIza") and put it in Vercel.' : kind === 'auth' ? ' → The provider rejected this key. Create a new one and replace it in Vercel.' : kind === 'quota' ? ' → Free quota is used up for now; the next key or model is tried automatically.' : '';
 // An "AQ." key may work on the normal Gemini endpoint even when Vertex is off, so try both; cooldowns are tracked per endpoint
 const variants = key => /^AQ\./.test(key) ? [{ vx: false, ck: key + '#g' }, { vx: true, ck: key + '#v' }] : [{ vx: false, ck: key }];
+const GM = new Map();
+// Google retires models often, so ask Google which Flash models this key can use right now (newest first; cached 30 min per key)
+async function geminiModels(E, key) {
+  if (E.GEMINI_MODEL || E.AI_MODEL) return [cleanVal(E.GEMINI_MODEL || E.AI_MODEL)];
+  const c = GM.get(ck(key)); if (c && Date.now() - c.t < 1800000) return c.list;
+  const r = await postJSON(GEMINI_LIST_URL, { 'x-goog-api-key': key }, null, 7000, 'GET'), arr = r.ok && r.data && Array.isArray(r.data.models) ? r.data.models : [];
+  const ver = n => parseFloat((String(n).match(/gemini-(\d+(?:\.\d+)?)/) || [])[1]) || 0;
+  const ok = arr.filter(m => m && /^models\/gemini-/.test(m.name) && /flash/.test(m.name) && (m.supportedGenerationMethods || []).includes('generateContent') && !/image|tts|live|audio|embed|robotics|computer|-exp|custom|thinking/.test(m.name)).map(m => m.name.replace('models/', ''));
+  ok.sort((a, b) => ver(b) - ver(a) || (/lite/.test(a) ? 1 : 0) - (/lite/.test(b) ? 1 : 0) || a.length - b.length);
+  const list = ok.length ? ok.filter(n => !/latest/.test(n)).slice(0, 4).concat(ok.filter(n => /latest/.test(n)).slice(0, 1)) : GEMINI_FALLBACK;
+  GM.set(ck(key), { t: ok.length ? Date.now() : Date.now() - 1500000, list });   // if discovery failed, try again in ~5 min
+  return list;
+}
 let RR = 0;
 // AI Studio ("AIza") keys first because they work on the free tier without extra setup; keys of the same type rotate so load spreads out
 function orderKeys(keys) {
@@ -103,9 +117,12 @@ function toGeminiContents(messages, camel) {
   }
   return contents;
 }
-function geminiBody(payload, vx, tools, model) {
+function geminiBody(payload, vx, tools, model, think) {
   const b = { contents: toGeminiContents(payload.messages, vx), generationConfig: { maxOutputTokens: clampMaxTokens(payload.max_tokens) } };
-  if (/gemini-2\.5/.test(model || '') && !/pro/.test(model)) b.generationConfig.thinkingConfig = { thinkingBudget: /lite/.test(model) ? 0 : (payload.fast === false ? 2048 : 512) };   // small thinking budget = much faster first words, still accurate for study questions
+  if (think !== false && !/pro|latest/.test(model || '')) {   // light thinking = much faster first words, still accurate for study questions (retried without it if a model rejects it)
+    if (/gemini-2\.5/.test(model || '')) b.generationConfig.thinkingConfig = { thinkingBudget: /lite/.test(model) ? 0 : 512 };
+    else if (/gemini-3/.test(model || '')) b.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
+  }
   if (payload.system) b[vx ? 'systemInstruction' : 'system_instruction'] = { parts: [{ text: String(payload.system) }] };
   if (tools) b.tools = [vx ? { googleSearch: {} } : { google_search: {} }];   // Google Search grounding (live web results + sources)
   return b;
@@ -118,29 +135,41 @@ function gemSources(cd) {
   return out.slice(0, 6);
 }
 const wantsTools = payload => payload.web === false ? [false] : [true, false];   // Gemini decides by itself when a Google search is needed; if the tool is refused (400) retry without it
+const pause = ms => new Promise(r => setTimeout(r, ms));
+// sends one Gemini request; if the tool or thinking option is refused (400) it retries without it, and retries once on a 503 "high demand"
+async function geminiSend(send, payload, vx, model, key) {
+  let r;
+  for (let attempt = 0; attempt < 2; attempt++) {
+    for (const tools of wantsTools(payload)) {
+      for (const think of [true, false]) { r = await send(geminiBody(payload, vx, tools, model, think)); if (r.ok || r.status !== 400) break; }
+      if (r.ok || r.status !== 400 || !tools) break;
+    }
+    if (r.ok || r.status !== 503) break; await pause(900);
+  }
+  return r;
+}
 async function callGemini(payload, keys, E) {
-  const models = E.GEMINI_MODEL || E.AI_MODEL ? [cleanVal(E.GEMINI_MODEL || E.AI_MODEL)] : GEMINI_MODELS, errs = [];
-  for (const key of orderKeys(keys)) for (const v of variants(key)) {
-    const vx = v.vx, n = keys.indexOf(key) + 1, kc = coolInfo(v.ck, '*');
-    if (kc) { errs.push('Gemini key ' + n + (vx ? ' [Vertex]' : '') + ' paused briefly (' + kc.why + ')'); continue; }
-    for (const model of models) {
-      const tag = 'Gemini key ' + n + ' [' + (vx ? 'Vertex' : 'AI Studio') + ', ' + model + ']', mc = coolInfo(v.ck, model);
-      if (mc) { errs.push(tag + ' paused briefly (' + mc.why + ')'); continue; }
-      const url = (vx ? VERTEX_URL : GEMINI_URL) + encodeURIComponent(model) + ':generateContent';
-      let r;
-      for (const tools of wantsTools(payload)) {
-        r = await postJSON(url, { 'x-goog-api-key': key }, geminiBody(payload, vx, tools, model), 30000);
-        if (r.ok || r.status !== 400 || !tools) break;
+  const errs = [];
+  for (const key of orderKeys(keys)) {
+    const models = await geminiModels(E, key);
+    for (const v of variants(key)) {
+      const vx = v.vx, n = keys.indexOf(key) + 1, kc = coolInfo(v.ck, '*');
+      if (kc) { errs.push('Gemini key ' + n + (vx ? ' [Vertex]' : '') + ' paused briefly (' + kc.why + ')'); continue; }
+      for (const model of models) {
+        const tag = 'Gemini key ' + n + ' [' + (vx ? 'Vertex' : 'AI Studio') + ', ' + model + ']', mc = coolInfo(v.ck, model);
+        if (mc) { errs.push(tag + ' paused briefly (' + mc.why + ')'); continue; }
+        const url = (vx ? VERTEX_URL : GEMINI_URL) + encodeURIComponent(model) + ':generateContent';
+        const r = await geminiSend(b => postJSON(url, { 'x-goog-api-key': key }, b, 30000), payload, vx, model, key);
+        if (!r.ok) {
+          const kind = noteFail(v.ck, model, r); errs.push(tag + ': ' + errMsg(r.data, 'HTTP ' + r.status).slice(0, 220) + hint(kind, vx));
+          if (kind === 'auth' || kind === 'disabled') break;
+          continue;
+        }
+        const cd = r.data && r.data.candidates && r.data.candidates[0];
+        const answer = ((cd && cd.content && cd.content.parts) || []).filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('\n').trim();
+        if (answer) return { status: 200, body: { content: [{ type: 'text', text: answer }], sources: gemSources(cd) } };
+        errs.push(tag + ' returned no text (' + ((cd && cd.finishReason) || (r.data && r.data.promptFeedback && r.data.promptFeedback.blockReason) || 'empty') + ').');
       }
-      if (!r.ok) {
-        const kind = noteFail(v.ck, model, r); errs.push(tag + ': ' + errMsg(r.data, 'HTTP ' + r.status).slice(0, 260) + hint(kind, vx));
-        if (kind === 'auth' || kind === 'disabled') break;
-        if (kind === 'quota' || kind === 'model' || r.status >= 500 || r.status === 599) continue; break;
-      }
-      const cd = r.data && r.data.candidates && r.data.candidates[0];
-      const answer = ((cd && cd.content && cd.content.parts) || []).filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('\n').trim();
-      if (answer) return { status: 200, body: { content: [{ type: 'text', text: answer }], sources: gemSources(cd) } };
-      errs.push(tag + ' returned no text (' + ((cd && cd.finishReason) || (r.data && r.data.promptFeedback && r.data.promptFeedback.blockReason) || 'empty') + ').'); continue;
     }
   }
   return { status: 502, error: errs.join(' | ') || 'No Gemini key available.' };
@@ -173,13 +202,19 @@ async function openRouterModels(E, payload) {
   if (!ORM.list.length || Date.now() - ORM.t > 1800000) {
     const r = await postJSON(OPENROUTER_MODELS_URL, {}, null, 7000, 'GET'), arr = r.ok && r.data && Array.isArray(r.data.data) ? r.data.data : [];
     const free = arr.filter(m => m && m.id && m.pricing && Number(m.pricing.prompt) === 0 && Number(m.pricing.completion) === 0 && !/guard|embed|whisper|tts|audio|image-gen|lyria|moderation|router|auto/i.test(m.id) && (!m.architecture || !m.architecture.output_modalities || m.architecture.output_modalities.includes('text')));
-    const score = m => (/gemini/.test(m.id) ? 5 : /llama-3\.3|llama-4/.test(m.id) ? 4 : /qwen|gpt-oss/.test(m.id) ? 4 : /deepseek|mistral|gemma/.test(m.id) ? 3 : 1) * 1e7 + (m.context_length || 0);
+    const score = m => (/gemini/.test(m.id) ? 5 : /llama-3\.3|llama-4/.test(m.id) ? 4 : /qwen|gpt-oss|nemotron/.test(m.id) ? 4 : /deepseek|mistral|gemma/.test(m.id) ? 3 : /inkling|agent/.test(m.id) ? 0 : 1) * 1e7 + (m.context_length || 0);
     free.sort((a, b) => score(b) - score(a));
     if (free.length) ORM = { t: Date.now(), list: free.slice(0, 12).map(m => ({ id: m.id, vision: !!(m.architecture && m.architecture.input_modalities && m.architecture.input_modalities.includes('image')) })) };
     else ORM = { t: Date.now() - 1500000, list: OPENROUTER_FALLBACK.map(id => ({ id, vision: false })) };   // retry discovery after ~5 min
   }
   const img = hasImages(payload);
   return ORM.list.filter(m => !img || m.vision).map(m => m.id).filter(id => !coolInfo('openrouter', id)).slice(0, 4);
+}
+// Only a genuinely rejected key pauses the whole key; any other failure just skips that one model for a while
+function orFail(key, model, r) {
+  const t = String(r.text || '');
+  if (/user not found|invalid api key|no auth credentials|api key.{0,20}(invalid|revoked|disabled)/i.test(t) && !/agentic|harness|only available/i.test(t)) return noteFail(key, model, r);
+  const k = noteFail('openrouter', model, r); if (k === 'other') setCool('openrouter', model, 1800000, 'model-error'); return k === 'other' ? 'model' : k;
 }
 async function callOpenRouter(payload, key, E) {
   const msgs = toORMessages(payload), kc = coolInfo(key, '*');
@@ -189,7 +224,7 @@ async function callOpenRouter(payload, key, E) {
     const r = await postJSON(OPENROUTER_URL, { authorization: 'Bearer ' + key, 'x-title': 'StudyNest' }, { model, messages: msgs, max_tokens: clampMaxTokens(payload.max_tokens) });
     const a = r.data && r.data.choices && r.data.choices[0] && r.data.choices[0].message && r.data.choices[0].message.content;
     if (r.ok && typeof a === 'string' && a.trim()) return { status: 200, body: { content: [{ type: 'text', text: a.trim() }] } };
-    const kind = r.ok ? 'other' : noteFail(r.status === 401 || /user not found|invalid api key/i.test(r.text || '') ? key : 'openrouter', model, r);
+    const kind = r.ok ? 'other' : orFail(key, model, r);
     last = { status: r.ok ? 502 : r.status, error: 'OpenRouter (' + model + '): ' + (r.ok ? 'empty response' : errMsg(r.data, 'HTTP ' + r.status).slice(0, 250)) + hint(kind) };
     if (kind === 'auth') break;
   }
@@ -272,35 +307,33 @@ async function openStream(url, headers, body, ms) {
   } catch (e) { clearTimeout(t); return { ok: false, status: 599, data: { error: { message: e && e.name === 'AbortError' ? 'timed out' : 'network error' } }, text: '' }; }
 }
 async function streamGemini(payload, keys, E, sink) {
-  const models = E.GEMINI_MODEL || E.AI_MODEL ? [cleanVal(E.GEMINI_MODEL || E.AI_MODEL)] : GEMINI_MODELS, errs = [];
-  for (const key of orderKeys(keys)) for (const v of variants(key)) {
-    const vx = v.vx, n = keys.indexOf(key) + 1, kc = coolInfo(v.ck, '*');
-    if (kc) { errs.push('Gemini key ' + n + (vx ? ' [Vertex]' : '') + ' paused briefly (' + kc.why + ')'); continue; }
-    for (const model of models) {
-      const tag = 'Gemini key ' + n + ' [' + (vx ? 'Vertex' : 'AI Studio') + ', ' + model + ']', mc = coolInfo(v.ck, model);
-      if (mc) { errs.push(tag + ' paused briefly (' + mc.why + ')'); continue; }
-      const url = (vx ? VERTEX_URL : GEMINI_URL) + encodeURIComponent(model) + ':streamGenerateContent?alt=sse';
-      let o;
-      for (const tools of wantsTools(payload)) {
-        o = await openStream(url, { 'x-goog-api-key': key }, geminiBody(payload, vx, tools, model), 20000);
-        if (o.ok || o.status !== 400 || !tools) break;
+  const errs = [];
+  for (const key of orderKeys(keys)) {
+    const models = await geminiModels(E, key);
+    for (const v of variants(key)) {
+      const vx = v.vx, n = keys.indexOf(key) + 1, kc = coolInfo(v.ck, '*');
+      if (kc) { errs.push('Gemini key ' + n + (vx ? ' [Vertex]' : '') + ' paused briefly (' + kc.why + ')'); continue; }
+      for (const model of models) {
+        const tag = 'Gemini key ' + n + ' [' + (vx ? 'Vertex' : 'AI Studio') + ', ' + model + ']', mc = coolInfo(v.ck, model);
+        if (mc) { errs.push(tag + ' paused briefly (' + mc.why + ')'); continue; }
+        const url = (vx ? VERTEX_URL : GEMINI_URL) + encodeURIComponent(model) + ':streamGenerateContent?alt=sse';
+        const o = await geminiSend(b => openStream(url, { 'x-goog-api-key': key }, b, 20000), payload, vx, model, key);
+        if (!o.ok) {
+          const kind = noteFail(v.ck, model, o); errs.push(tag + ': ' + errMsg(o.data, 'HTTP ' + o.status).slice(0, 220) + hint(kind, vx));
+          if (kind === 'auth' || kind === 'disabled') break;
+          continue;
+        }
+        let any = false, sources = [];
+        try {
+          await readSSE(o.resp, d => {
+            const cd = d.candidates && d.candidates[0]; if (!cd) return;
+            const s = gemSources(cd); if (s.length) sources = s;
+            for (const p of ((cd.content && cd.content.parts) || [])) if (p && !p.thought && typeof p.text === 'string' && p.text) { any = true; sink.send({ t: p.text }); }
+          });
+        } catch (e) { if (any) return { done: true, interrupted: true, sources }; errs.push(tag + ': stream failed'); continue; }
+        if (any) return { done: true, sources };
+        errs.push(tag + ' returned no text');
       }
-      if (!o.ok) {
-        const kind = noteFail(v.ck, model, o); errs.push(tag + ': ' + errMsg(o.data, 'HTTP ' + o.status).slice(0, 300) + hint(kind, vx));
-        if (kind === 'auth' || kind === 'disabled') break;
-        if (kind === 'quota' || kind === 'model' || o.status >= 500 || o.status === 599) continue; break;
-      }
-      let any = false, sources = [];
-      try {
-        await readSSE(o.resp, d => {
-          const cd = d.candidates && d.candidates[0]; if (!cd) return;
-          const s = gemSources(cd); if (s.length) sources = s;
-          for (const p of ((cd.content && cd.content.parts) || [])) if (p && !p.thought && typeof p.text === 'string' && p.text) { any = true; sink.send({ t: p.text }); }
-        });
-      } catch (e) { o.done(); if (any) return { done: true, interrupted: true, sources }; errs.push(tag + ': stream failed'); continue; }
-      o.done();
-      if (any) return { done: true, sources };
-      errs.push(tag + ' returned no text'); continue;
     }
   }
   return { error: errs.join(' | ') || 'No Gemini key available.' };
@@ -310,7 +343,7 @@ async function streamOpenRouter(payload, key, E, sink, sources) {
   const models = await openRouterModels(E, payload); let last = 'OpenRouter: no free model is available right now.';
   for (const model of models) {
     const o = await openStream(OPENROUTER_URL, { authorization: 'Bearer ' + key, 'x-title': 'StudyNest' }, { model, stream: true, messages: toORMessages(payload), max_tokens: clampMaxTokens(payload.max_tokens) });
-    if (!o.ok) { const kind = noteFail(o.status === 401 || /user not found|invalid api key/i.test(o.text || '') ? key : 'openrouter', model, o); last = 'OpenRouter (' + model + '): ' + errMsg(o.data, 'HTTP ' + o.status).slice(0, 250) + hint(kind); if (kind === 'auth') break; continue; }
+    if (!o.ok) { const kind = orFail(key, model, o); last = 'OpenRouter (' + model + '): ' + errMsg(o.data, 'HTTP ' + o.status).slice(0, 250) + hint(kind); if (kind === 'auth') break; continue; }
     let any = false;
     try { await readSSE(o.resp, d => { const t = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content; if (typeof t === 'string' && t) { any = true; sink.send({ t }); } }); }
     catch (e) { o.done(); if (any) return { done: true, interrupted: true, sources }; last = 'OpenRouter (' + model + '): stream failed'; continue; }
@@ -380,13 +413,14 @@ async function selfTest(E) {
   const k = getKeys(E), probe = { messages: [{ role: 'user', content: 'Reply with the single word OK.' }], max_tokens: 8, web: false }, out = {}, advice = [];
   const run = async (name, fn) => { try { const r = await fn(); out[name] = r && r.status === 200 ? 'WORKS' : 'FAILED: ' + (r && r.error); } catch (e) { out[name] = 'FAILED: could not reach the service'; } };
   for (let i = 0; i < k.gemini.length; i++) { COOL.clear(); await run('gemini_key_' + (i + 1) + ' (' + k.gemini[i].slice(0, 4) + '…)', () => callGemini(probe, [k.gemini[i]], E)); }
+  GM.clear(); if (k.gemini[0]) out.gemini_models_now = await geminiModels(E, k.gemini[0]);
   if (k.openrouter) { COOL.clear(); await run('openrouter', () => callOpenRouter(probe, k.openrouter, E)); out.openrouter_free_models_now = (await openRouterModels({}, probe)).slice(0, 4); }
   if (k.anthropic) await run('anthropic', () => callAnthropic(probe, k.anthropic, E));
   await run('free_fallback_pollinations', () => callPollinations(probe));
   const w = await wikiContext('Photosynthesis'); out.web_search = w ? 'WORKS (' + w.label + ')' : 'FAILED: Wikipedia not reachable'; out.tavily_key_found = !!envKey(E, ['TAVILY_API_KEY'], n => n.includes('TAVILY'));
   const ok = Object.keys(out).filter(x => /^(gemini|openrouter$|anthropic)/.test(x) && out[x] === 'WORKS');
   if (!ok.length) advice.push('No paid/keyed AI provider is working. Fastest fix: create a free Google AI Studio key at https://aistudio.google.com/apikey (starts with AIza), add it in Vercel > Settings > Environment Variables as GEMINI_API_KEY (Production), then Redeploy.');
-  if (Object.values(out).some(v => /Vertex AI API|aiplatform|Vertex/i.test(String(v)) && /FAILED/.test(String(v)))) advice.push('Your "AQ." keys are Vertex AI keys and the Vertex AI API is off in that Google Cloud project. Either enable it, or use an AI Studio key (AIza...).');
+  if (!ok.length && Object.values(out).some(v => /Vertex/i.test(String(v)) && /FAILED/.test(String(v)))) advice.push('If your "AQ." keys keep failing on every Gemini model, create a free Google AI Studio key (AIza...) instead.');
   if (!out.tavily_key_found) advice.push('Optional: a free Tavily key (tavily.com) as TAVILY_API_KEY gives non-Gemini models real web search; without it they use Wikipedia.');
   out.any_ai_working = ok.length > 0 || /WORKS/.test(String(out.free_fallback_pollinations)); out.advice = advice;
   return out;
