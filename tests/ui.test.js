@@ -8,7 +8,7 @@ const dom = new JSDOM(html, { runScripts: 'dangerously', url: 'https://x.test/',
   Object.defineProperty(w.navigator, 'clipboard', { value: { writeText: t => (w.copied.push(t), Promise.resolve()) } });
   w.fetch = async (url, opt) => { bodies.push(JSON.parse(opt.body)); n++;
     if (mode === 'fail') return { ok: false, status: 502, statusText: 'Bad Gateway', headers: { get: () => 'application/json' }, text: async () => JSON.stringify({ error: { message: 'The AI could not answer', details: 'x' } }) };
-    return { ok: true, status: 200, headers: { get: () => 'application/json' }, text: async () => JSON.stringify({ content: [{ type: 'text', text: 'Answer ' + n }], sources: [] }) }; };
+    return { ok: true, status: 200, headers: { get: () => 'application/json' }, text: async () => JSON.stringify({ content: [{ type: 'text', text: 'Answer ' + n }], sources: [], provider: n % 2 ? 'gemini' : 'openrouter', model: n % 2 ? 'gemini-3.8-flash' : 'nvidia/nemotron-x:free' }) }; };
 } });
 const w = dom.window, d = w.document, sleep = ms => new Promise(r => setTimeout(r, ms));
 const send = async q => { d.getElementById('aiInput').value = q; w.eval('sendAI()'); await sleep(250); };
@@ -43,5 +43,8 @@ const ev = c => w.eval(c);
   assert.strictEqual(ev('aiLog.length'), 0); assert.strictEqual(ev('aiHistory.length'), 0); console.log('save + delete ok');
   // web mode cycle
   ev('aiToggleWeb()'); assert.strictEqual(ev('aiWebMode'), 'on'); await send('hi'); assert.strictEqual(bodies[bodies.length - 1].web, true); ev('aiToggleWeb()'); await send('hi2'); assert.strictEqual(bodies[bodies.length - 1].web, false); console.log('web modes ok');
+  // usage counter
+  const use = ev('aiUseGet()'); assert.ok(use.n >= 5 && use.err >= 1 && use.fall >= 1 && use.by.gemini >= 1 && use.by.openrouter >= 1, JSON.stringify(use));
+  assert.ok(/📊 \d+/.test(d.getElementById('aiUseBtn').textContent)); ev('aiUsageModal()'); assert.ok(/AI usage today/.test(d.body.innerHTML) && /Answered by/.test(d.body.innerHTML) && /nemotron-x/.test(d.body.innerHTML)); console.log('usage counter ok', JSON.stringify(use.by));
   console.log('page errors:', errs); assert.strictEqual(errs.length, 0); console.log('UI ALL PASSED'); process.exit(0);
 })().catch(e => { console.error('FAIL', e.stack || e); console.log(errs); process.exit(1); });

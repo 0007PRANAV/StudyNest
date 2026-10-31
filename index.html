@@ -435,7 +435,7 @@
 
   <!-- AI TUTOR -->
   <div class="page" id="pageAI">
-    <div class="flex-between"><div class="section-title" style="margin-bottom:0;">🤖 AI Tutor</div><div style="display:flex;gap:6px;"><button class="ai-mini-btn" onclick="aiHistoryModal()">🕘 History</button><button class="ai-mini-btn" onclick="aiNewChat()">➕ New</button></div></div>
+    <div class="flex-between"><div class="section-title" style="margin-bottom:0;">🤖 AI Tutor</div><div style="display:flex;gap:6px;"><button class="ai-mini-btn" id="aiUseBtn" onclick="aiUsageModal()">📊 0</button><button class="ai-mini-btn" onclick="aiHistoryModal()">🕘 History</button><button class="ai-mini-btn" onclick="aiNewChat()">➕ New</button></div></div>
     <div id="aiMessages" style="display:flex;flex-direction:column;gap:10px;margin:14px 0;"></div>
     <div id="aiAttachBar" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
     <div class="card" style="margin-bottom:0;">
@@ -935,7 +935,7 @@ async function callAI(payload, onDelta) {
     throw fail('Could not reach the AI server. Check your internet connection' + (kb > 3000 ? ' (this request is also very large, ' + kb + ' KB, which can make the connection fail).' : '.'), 'Network error: ' + (e && e.message) + '\nRequest size: ' + kb + ' KB');
   }
   if (resp.ok && onDelta && resp.headers && /event-stream/.test(resp.headers.get('content-type') || '')) {
-    let text = '', sources = [], err = null;
+    let text = '', sources = [], err = null, prov = '', mdl = '', fails = 0;
     try {
       const reader = resp.body.getReader(), dec = new TextDecoder(); let buf = '';
       for (;;) {
@@ -945,13 +945,13 @@ async function callAI(payload, onDelta) {
           const blk = buf.slice(0, i); buf = buf.slice(i).replace(/^\r?\n\r?\n/, '');
           const ln = blk.split(/\r?\n/).filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).join(''); if (!ln) continue;
           let d; try { d = JSON.parse(ln); } catch (e) { continue; }
-          if (d.t) { text += d.t; onDelta(text); } if (d.sources) sources = d.sources; if (d.error) err = d.error;
+          if (d.t) { text += d.t; onDelta(text); } if (d.sources) sources = d.sources; if (d.error) err = d.error; if (d.provider) { prov = d.provider; mdl = d.model || ''; fails = d.fails || 0; }
         }
       }
     } catch (e) { if (!text) throw fail('The connection dropped before the AI answered.', 'Stream error: ' + (e && e.message) + '\nRequest size: ' + kb + ' KB'); err = err || 'cut off'; }
     if (!text) throw fail(err || 'The AI returned an empty answer.', 'Empty stream. Request size: ' + kb + ' KB');
     if (err) text += '\n\n*(The reply was cut off by a connection problem. Ask me to continue.)*';
-    return { content: [{ type: 'text', text }], sources };
+    return { content: [{ type: 'text', text }], sources, provider: prov, model: mdl, fails };
   }
   let data = null;
   const raw = await resp.text();
@@ -2132,7 +2132,7 @@ function aiShowChat() {
   if (m.lastElementChild) setTimeout(() => m.lastElementChild.scrollIntoView({ block: 'end' }), 50);
 }
 function aiOpen() {
-  aiWebBtn();
+  aiWebBtn(); try { aiUseChip(); } catch (e) {}
   if (aiLoadedFor !== currentUser.username) { aiLoadedFor = currentUser.username; aiStore = aiLoadStore(); aiShowChat(); }
   aiWelcome();
 }
@@ -2171,6 +2171,39 @@ function aiWebBtn() { const b = $id('aiBtnWeb'); if (!b) return; b.classList.tog
 function aiToggleWeb() {
   aiWebMode = { auto: 'on', on: 'off', off: 'auto' }[aiWebMode]; try { storeSet('aiwebmode', aiWebMode); } catch (e) {} aiWebBtn();
   showToast(aiWebMode === 'auto' ? '🌐 Auto: the AI searches the web by itself whenever a question needs it' : aiWebMode === 'on' ? '🌐 Always search the web for every question' : '🌐 Web search off: answers use only the AI and your app data');
+}
+// ---- AI usage counter (this device, per user, per day) ----
+const AI_DAILY_LIMIT = 600;   // matches the server's per-connection daily guard
+const aiDay = () => new Date().toISOString().slice(0, 10);
+const aiUseKey = () => 'aiuse_' + currentUser.username;
+function aiUseGet() { let u = null; try { u = storeGet(aiUseKey()); } catch (e) {} if (!u || u.day !== aiDay()) u = { day: aiDay(), n: 0, err: 0, by: {}, last: null, fall: 0 }; return u; }
+function aiProvLabel(p, m) {
+  m = String(m || '').replace(/:free$/, '').split('/').pop();
+  return p === 'gemini' ? 'Gemini' + (m ? ' (' + m.replace(/^gemini-/, '') + ')' : '') : p === 'openrouter' ? 'OpenRouter' + (m ? ' (' + m + ')' : '') : p === 'anthropic' ? 'Claude' : p === 'pollinations' ? 'Free AI' : (p || 'AI');
+}
+function aiUseNote(ok, data) {
+  try {
+    const u = aiUseGet(), prev = u.last && u.last.provider;
+    if (!ok) u.err++;
+    else { u.n++; const p = (data && data.provider) || 'unknown'; u.by[p] = (u.by[p] || 0) + 1; u.last = { provider: p, model: (data && data.model) || '', ts: Date.now() }; if (p !== 'gemini' && p !== 'unknown') { u.fall++; if (prev !== p) showToast('⚡ Gemini is busy or out of quota, so ' + aiProvLabel(p, data.model) + ' answered'); } }
+    storeSet(aiUseKey(), u); aiUseChip();
+  } catch (e) {}
+}
+function aiUseChip() { const b = $id('aiUseBtn'); if (!b) return; const u = aiUseGet(); b.textContent = '📊 ' + u.n; b.style.borderColor = u.n >= AI_DAILY_LIMIT * 0.9 ? 'var(--danger)' : ''; }
+function aiUsageModal() {
+  const u = aiUseGet(), pct = Math.min(100, Math.round(u.n / AI_DAILY_LIMIT * 100)), left = Math.max(0, AI_DAILY_LIMIT - u.n);
+  const by = Object.keys(u.by).map(p => `<div style="display:flex;justify-content:space-between;"><span>${escapeHtml(aiProvLabel(p))}</span><b>${u.by[p]}</b></div>`).join('') || '<div style="color:var(--muted)">No answers yet today.</div>';
+  openModal(`<div class="modal-title">📊 AI usage today</div>
+    <div style="font-size:.85rem;line-height:1.7;">
+      <div style="display:flex;justify-content:space-between;"><span>Questions asked</span><b>${u.n} / ${AI_DAILY_LIMIT}</b></div>
+      <div style="height:8px;background:var(--border);border-radius:6px;margin:6px 0 12px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${pct >= 90 ? 'var(--danger)' : 'var(--accent)'};"></div></div>
+      <div style="font-weight:600;margin-bottom:4px;">Answered by</div>${by}
+      <div style="display:flex;justify-content:space-between;margin-top:8px;"><span>Used a backup AI</span><b>${u.fall}</b></div>
+      <div style="display:flex;justify-content:space-between;"><span>Errors</span><b>${u.err}</b></div>
+      ${u.last ? `<div style="display:flex;justify-content:space-between;"><span>Last answer</span><b>${escapeHtml(aiProvLabel(u.last.provider, u.last.model))}</b></div>` : ''}
+      <div style="font-size:.74rem;color:var(--muted);margin-top:12px;">${left} questions left under the app limit (resets daily). The AI providers also have their own free limits that this app cannot see. If answers come from a backup AI, a provider's free quota is probably used up for now. It recovers on its own, and the count here is for this device only.</div>
+    </div>
+    <button class="btn btn-accent" style="width:100%;margin-top:12px;" onclick="closeModalDirect()">Close</button>`);
 }
 let aiRaf = 0, aiCurX = null;
 function aiActs(e) {
@@ -2238,7 +2271,7 @@ function aiDraw(e, live) {
     el.className = 'ai-user'; el.innerHTML = escapeHtml(e.text || '') + ((e.files || []).length ? '<div style="margin-top:6px;font-size:.72rem;color:var(--muted);">📎 ' + escapeHtml(e.files.join(', ')) + '</div>' : '');
   } else if (e.k === 'ai') {
     el.className = 'ai-bubble';
-    const mt = e.meta; el.innerHTML = (mt ? `<details class="ai-think"><summary>⏱ Thought for ${aiFmt(mt.total)}</summary><ol>${mt.steps.map(s => `<li>${escapeHtml(s[0])} <span>${aiFmt(s[1])}</span></li>`).join('')}</ol></details>` : '') + '<div class="ai-md">' + aiMd(e.text) + '</div>' + ((e.sources || []).length ? '<div class="ai-src"><span>🌐 Sources</span>' + e.sources.map(s => '<a href="' + String(s.url).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(aiClip(s.title, 48)) + '</a>').join('') + '</div>' : '');
+    const mt = e.meta; el.innerHTML = (mt ? `<details class="ai-think"><summary>⏱ Thought for ${aiFmt(mt.total)}${mt.model && mt.model !== 'AI' ? ' · ' + escapeHtml(mt.model) : ''}</summary><ol>${mt.steps.map(s => `<li>${escapeHtml(s[0])} <span>${aiFmt(s[1])}</span></li>`).join('')}</ol></details>` : '') + '<div class="ai-md">' + aiMd(e.text) + '</div>' + ((e.sources || []).length ? '<div class="ai-src"><span>🌐 Sources</span>' + e.sources.map(s => '<a href="' + String(s.url).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;') + '" target="_blank" rel="noopener noreferrer">' + escapeHtml(aiClip(s.title, 48)) + '</a>').join('') + '</div>' : '');
   } else if (e.k === 'applied') {
     el.className = 'ai-bubble'; el.style.borderLeftColor = 'var(--success)';
     el.innerHTML = '<div class="ai-result-label">Applied to your app</div>' + e.items.map(d => '<div>' + escapeHtml(d) + '</div>').join('') + (live && aiUndo ? '<div class="ai-action-row"><button class="ai-mini-btn" onclick="aiUndoLast(this)">↩️ Undo</button></div>' : '');
@@ -2590,12 +2623,13 @@ async function sendAI() {
     const undo = {}; Object.keys(snap).forEach(k => { if (localStorage.getItem(k) !== snap[k]) undo[k] = snap[k]; });
     for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('sn_') && !k.includes('aichat') && !(k in snap)) undo[k] = null; }
     aiUndo = done.length && Object.keys(undo).length ? undo : null;
-    aiPush({ k: 'ai', text: text || (done.length || media.length ? 'Done.' : '…'), meta: { total: (performance.now() - T0) / 1000, steps }, sources: (data.sources || []).filter(s => s && /^https?:\/\//.test(s.url)).slice(0, 6) });
+    aiUseNote(true, data);
+    aiPush({ k: 'ai', text: text || (done.length || media.length ? 'Done.' : '…'), meta: { total: (performance.now() - T0) / 1000, steps, model: aiProvLabel(data.provider, data.model) }, sources: (data.sources || []).filter(s => s && /^https?:\/\//.test(s.url)).slice(0, 6) });
     if (done.length) { aiRefreshViews(); aiPush({ k: 'applied', items: done }); }
     media.forEach(fn => fn());
     if (nav) setTimeout(() => aiGoto(nav.page, nav), 1200);
   } catch (e) {
-    if (think) think.remove();
+    if (think) think.remove(); aiUseNote(false);
     aiDraw({ k: 'error', x: aiCurX, text: e.message || 'Connection error. Please try again.', detail: e.detail || (e.stack ? String(e.stack).split('\n').slice(0, 3).join('\n') : '') }, true);
   } finally { if (timer) clearInterval(timer); aiBusy = false; }
 }

@@ -93,7 +93,7 @@ async function callAnthropic(payload, key, E) {
     const body = { model, max_tokens: clampMaxTokens(payload.max_tokens), messages: payload.messages };
     if (payload.system) body.system = String(payload.system);
     const r = await postJSON(ANTHROPIC_URL, { 'x-api-key': key, 'anthropic-version': '2023-06-01' }, body);
-    if (r.ok) return { status: 200, body: r.data || { content: [] } };
+    if (r.ok) return { status: 200, body: Object.assign({}, r.data || { content: [] }, { provider: 'anthropic', model }) };
     const kind = noteFail(key, model, r);
     last = { status: r.status, error: 'Anthropic (' + model + '): ' + errMsg(r.data, 'HTTP ' + r.status) + hint(kind) };
     if (kind !== 'model') break;
@@ -169,7 +169,7 @@ async function callGemini(payload, keys, E) {
         }
         const cd = r.data && r.data.candidates && r.data.candidates[0];
         const answer = ((cd && cd.content && cd.content.parts) || []).filter(p => p && !p.thought && typeof p.text === 'string').map(p => p.text).join('\n').trim();
-        if (answer) return { status: 200, body: { content: [{ type: 'text', text: answer }], sources: gemSources(cd) } };
+        if (answer) return { status: 200, body: { content: [{ type: 'text', text: answer }], sources: gemSources(cd), provider: 'gemini', model, fails: errs.length } };
         errs.push(tag + ' returned no text (' + ((cd && cd.finishReason) || (r.data && r.data.promptFeedback && r.data.promptFeedback.blockReason) || 'empty') + ').');
       }
     }
@@ -225,7 +225,7 @@ async function callOpenRouter(payload, key, E) {
   for (const model of models) {
     const r = await postJSON(OPENROUTER_URL, { authorization: 'Bearer ' + key, 'x-title': 'StudyNest' }, { model, messages: msgs, max_tokens: clampMaxTokens(payload.max_tokens) });
     const a = r.data && r.data.choices && r.data.choices[0] && r.data.choices[0].message && r.data.choices[0].message.content;
-    if (r.ok && typeof a === 'string' && a.trim()) return { status: 200, body: { content: [{ type: 'text', text: a.trim() }] } };
+    if (r.ok && typeof a === 'string' && a.trim()) return { status: 200, body: { content: [{ type: 'text', text: a.trim() }], provider: 'openrouter', model } };
     const kind = r.ok ? 'other' : orFail(key, model, r);
     last = { status: r.ok ? 502 : r.status, error: 'OpenRouter (' + model + '): ' + (r.ok ? 'empty response' : errMsg(r.data, 'HTTP ' + r.status).slice(0, 250)) + hint(kind) };
     if (kind === 'auth') break;
@@ -333,8 +333,8 @@ async function streamGemini(payload, keys, E, sink) {
             const s = gemSources(cd); if (s.length) sources = s;
             for (const p of ((cd.content && cd.content.parts) || [])) if (p && !p.thought && typeof p.text === 'string' && p.text) { any = true; sink.send({ t: p.text }); }
           });
-        } catch (e) { if (any) return { done: true, interrupted: true, sources }; errs.push(tag + ': stream failed'); continue; }
-        if (any) return { done: true, sources };
+        } catch (e) { if (any) return { done: true, interrupted: true, sources, provider: 'gemini', model, fails: errs.length }; errs.push(tag + ': stream failed'); continue; }
+        if (any) return { done: true, sources, provider: 'gemini', model, fails: errs.length };
         errs.push(tag + ' returned no text');
       }
     }
@@ -349,8 +349,8 @@ async function streamOpenRouter(payload, key, E, sink, sources) {
     if (!o.ok) { const kind = orFail(key, model, o); last = 'OpenRouter (' + model + '): ' + errMsg(o.data, 'HTTP ' + o.status).slice(0, 250) + hint(kind); if (kind === 'auth') break; continue; }
     let any = false;
     try { await readSSE(o.resp, d => { const t = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content; if (typeof t === 'string' && t) { any = true; sink.send({ t }); } }); }
-    catch (e) { o.done(); if (any) return { done: true, interrupted: true, sources }; last = 'OpenRouter (' + model + '): stream failed'; continue; }
-    o.done(); if (any) return { done: true, sources }; last = 'OpenRouter (' + model + '): empty response';
+    catch (e) { o.done(); if (any) return { done: true, interrupted: true, sources, provider: 'openrouter', model }; last = 'OpenRouter (' + model + '): stream failed'; continue; }
+    o.done(); if (any) return { done: true, sources, provider: 'openrouter', model }; last = 'OpenRouter (' + model + '): empty response';
   }
   return { error: last };
 }
@@ -363,7 +363,7 @@ async function routeStream(payload, E, sink) {
     if (p === 'gemini' && k.gemini.length) r = await streamGemini(payload, k.gemini, E, sink);
     else if (p === 'openrouter' && k.openrouter) { const w = await withWeb(payload, E); r = await streamOpenRouter(w.p, k.openrouter, E, sink, w.sources); }
     else continue;
-    if (r.done) { sink.send({ done: true, sources: r.sources || [], interrupted: !!r.interrupted }); return null; }
+    if (r.done) { sink.send({ done: true, sources: r.sources || [], interrupted: !!r.interrupted, provider: r.provider || '', model: r.model || '', fails: r.fails || 0 }); return null; }
     errors.push(r.error);
   }
   const fb = await route(payload, E, ['gemini', 'openrouter']);

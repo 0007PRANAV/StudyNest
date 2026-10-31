@@ -45,7 +45,7 @@ const msg = t => [{ role: 'user', content: t }];
   // D) streaming through AI Studio
   calls = []; script = (u) => /generativelanguage/.test(u) ? { status: 200, sse: 'data: ' + JSON.stringify({ candidates: [{ content: { parts: [{ text: 'Hel' }] } }] }) + '\n\ndata: ' + JSON.stringify({ candidates: [{ content: { parts: [{ text: 'lo' }] }, groundingMetadata: { groundingChunks: [{ web: { uri: 'https://e.com', title: 'E' } }] } }] }) + '\n\n' } : null;
   r = await post({ GEMINI_API_KEY: 'AIzaDDDDDDDDDDDDDDDDDDDDDDDD' }, { messages: msg('latest news'), stream: true });
-  const o = r.out.join(''); assert.ok(o.includes('"t":"Hel"') && o.includes('https://e.com')); console.log('D ok: streaming + sources');
+  const o = r.out.join(''); assert.ok(o.includes('"t":"Hel"') && o.includes('https://e.com') && o.includes('"provider":"gemini"') && /"model":"gemini-/.test(o), 'done event reports provider+model'); console.log('D ok: streaming + sources');
   // E) Gemini gets the search tool by default (model decides), and web:false turns it off
   const tools = p => ((calls.find(c => /generateContent/.test(c.url)).body.tools) || []).length; calls = []; script = () => gem('x'); await post({ GEMINI_API_KEY: 'AIzaEEEEEEEEEEEEEEEEEEEEEEEE' }, { messages: msg('who won the match yesterday') }); assert.strictEqual(tools(), 1);
   calls = []; await post({ GEMINI_API_KEY: 'AIzaEEEEEEEEEEEEEEEEEEEEEEEE' }, { messages: msg('hi'), web: false }); assert.strictEqual(tools(), 0); console.log('E ok: Gemini search tool auto-on, web:false respected');
