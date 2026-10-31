@@ -254,6 +254,12 @@
   .ai-result-box { background: var(--surface); border-radius: 14px; padding: 14px; margin-top: 10px; border-left: 3px solid var(--accent2); font-size: 0.85rem; line-height: 1.65; white-space: pre-wrap; }
   .ai-result-label { font-weight: 700; font-size: 0.8rem; color: #a78bfa; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
   .ai-action-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  .ai-msg-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
+  .ai-user .ai-msg-actions { justify-content: flex-end; }
+  .ai-msg-actions .ai-mini-btn { padding: 5px 10px; font-size: 0.68rem; opacity: .85; }
+  .edu-chips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+  .edu-chip { display: inline-flex; align-items: center; gap: 4px; padding: 6px 10px; border: 1px solid var(--border); border-radius: 14px; font-size: .74rem; cursor: pointer; background: var(--card); }
+  .edu-chip input { accent-color: var(--accent); margin: 0; }
   .ai-mini-btn { padding: 7px 12px; border-radius: 14px; font-size: 0.72rem; font-weight: 600; border: 1px solid var(--border); background: var(--card); color: var(--text); cursor: pointer; }
   .important-flag { display: inline-flex; align-items: center; gap: 3px; background: rgba(245,158,11,0.18); color: var(--accent3); padding: 2px 8px; border-radius: 10px; font-size: 0.65rem; font-weight: 700; margin-left: 6px; }
   .share-target { display: flex; align-items: center; gap: 12px; padding: 13px 0; border-bottom: 1px solid var(--border); cursor: pointer; }
@@ -478,6 +484,11 @@
       <select class="inp" id="editStream" style="margin-bottom:10px;display:none;"></select>
       <select class="inp" id="editMedium" style="margin-bottom:10px;"></select>
       <select class="inp" id="editExam" style="margin-bottom:10px;"></select>
+      <select class="inp" id="editYear" style="margin-bottom:10px;"></select>
+      <select class="inp" id="editHours" style="margin-bottom:10px;"></select>
+      <select class="inp" id="editStyle" style="margin-bottom:10px;"></select>
+      <div style="font-size:.78rem;color:var(--muted);margin:2px 0 6px;">Subjects I find hard (tap to select)</div>
+      <div class="edu-chips" id="editHard"></div>
       <input class="inp" id="editSchool" placeholder="School (optional, never sent to the AI)" maxlength="80" style="margin-bottom:10px;">
       <button class="btn btn-primary w-full" onclick="saveProfile()">Save Changes</button>
     </div>
@@ -951,7 +962,7 @@ async function callAI(payload, onDelta) {
     else if (resp.status === 504 || /FUNCTION_INVOCATION_TIMEOUT/i.test(raw)) msg = 'The AI took too long to read your files and the server stopped waiting (HTTP 504). Try fewer or smaller photos, then retry.';
     else if (resp.status === 404) msg = 'The AI endpoint /api/ai was not found on this site (HTTP 404). Redeploy the project so the api folder is included.';
     else if (!msg) msg = 'AI request failed (HTTP ' + resp.status + ').';
-    throw fail(typeof msg === 'string' ? msg : 'AI request failed.', 'HTTP ' + resp.status + ' ' + (resp.statusText || '') + '\nRequest size: ' + kb + ' KB\nServer said: ' + raw.slice(0, 700));
+    throw fail(typeof msg === 'string' ? msg : 'AI request failed.', 'HTTP ' + resp.status + ' ' + (resp.statusText || '') + '\nRequest size: ' + kb + ' KB\nServer said: ' + raw.slice(0, 2000));
   }
   if (!data) throw fail('The AI service returned an empty response.', 'HTTP ' + resp.status + '\nRequest size: ' + kb + ' KB');
   return data;
@@ -2116,6 +2127,7 @@ function aiLoadStore() {
 }
 function aiShowChat() {
   const c = aiCur(); aiHistory = (c.history || []).slice(); aiLog = (c.log || []).slice(); aiPending = [];
+  let cx = null; aiLog.forEach(e => { if (e.k === 'user' && !e.x) cx = e.x = uid(); else if (!e.x) e.x = cx || (cx = uid()); else cx = e.x; });
   const m = $id('aiMessages'); m.innerHTML = ''; aiLog.forEach(e => aiDraw(e, false)); aiBar(); aiWelcome();
   if (m.lastElementChild) setTimeout(() => m.lastElementChild.scrollIntoView({ block: 'end' }), 50);
 }
@@ -2154,10 +2166,41 @@ function aiWelcome() {
   const qs = ['Summarize my notes', 'What homework is pending?', 'Quiz me from my notes', 'Plan my study week', 'Draw a diagram of the water cycle'];
   m.insertAdjacentHTML('afterbegin', `<div id="aiWelcomeBox" class="ai-bubble"><div class="ai-md"><p><b>Hi ${escapeHtml(currentUser.name.split(' ')[0])}, I'm your StudyNest AI.</b></p><p>I can read your notes, question papers, timetable, homework, seats and announcements, and change them when you ask. Use 📎 to attach files, 🗂️ to attach a notes folder, 🎨 for images and 🎬 for videos.</p></div><div class="ai-action-row">${qs.map(x => `<button class="ai-mini-btn" onclick="aiQuick(this.textContent)">${x}</button>`).join('')}</div></div>`);
 }
-let aiWeb = false; try { aiWeb = !!storeGet('aiweb'); } catch (e) {}
-function aiWebBtn() { const b = $id('aiBtnWeb'); if (b) b.classList.toggle('on', aiWeb); }
-function aiToggleWeb() { aiWeb = !aiWeb; try { storeSet('aiweb', aiWeb); } catch (e) {} aiWebBtn(); showToast(aiWeb ? '🌐 Web search is on: answers can use the internet and show sources' : 'Web search is off'); }
-let aiRaf = 0;
+let aiWebMode = 'auto'; try { const v = storeGet('aiwebmode'); if (['auto', 'on', 'off'].includes(v)) aiWebMode = v; else if (storeGet('aiweb')) aiWebMode = 'on'; } catch (e) {}
+function aiWebBtn() { const b = $id('aiBtnWeb'); if (!b) return; b.classList.toggle('on', aiWebMode === 'on'); b.style.opacity = aiWebMode === 'off' ? '.45' : '1'; b.innerHTML = '🌐<span style="display:block;font-size:.5rem;line-height:1;margin-top:1px;">' + aiWebMode.toUpperCase() + '</span>'; }
+function aiToggleWeb() {
+  aiWebMode = { auto: 'on', on: 'off', off: 'auto' }[aiWebMode]; try { storeSet('aiwebmode', aiWebMode); } catch (e) {} aiWebBtn();
+  showToast(aiWebMode === 'auto' ? '🌐 Auto: the AI searches the web by itself whenever a question needs it' : aiWebMode === 'on' ? '🌐 Always search the web for every question' : '🌐 Web search off: answers use only the AI and your app data');
+}
+let aiRaf = 0, aiCurX = null;
+function aiActs(e) {
+  const b = (a, l, t) => `<button class="ai-mini-btn" title="${t}" onclick="aiMsgAct('${a}',this)">${l}</button>`;
+  if (e.k === 'user') return '<div class="ai-msg-actions">' + (/^[🎨🎬]/.test(e.text || '') ? '' : b('edit', '✏️ Edit', 'Edit and resend')) + b('copy', '📋 Copy', 'Copy') + b('del', '🗑️ Delete', 'Delete this message and its answer') + '</div>';
+  if (e.k === 'ai') return '<div class="ai-msg-actions">' + b('copy', '📋 Copy', 'Copy answer') + b('redo', '🔄 Redo', 'Ask again') + b('simple', '✂️ Simpler', 'Explain more simply') + b('more', '➕ Deeper', 'More detail') + b('note', '📓 Save', 'Save to Notes') + b('del', '🗑️ Delete', 'Delete') + '</div>';
+  if (e.k === 'error') return '<div class="ai-msg-actions">' + b('redo', '🔄 Retry', 'Send again') + b('del', '🗑️ Delete', 'Remove this message') + '</div>';
+  return '';
+}
+function aiCopyText(t) {
+  const old = () => { const a = document.createElement('textarea'); a.value = t; a.style.cssText = 'position:fixed;opacity:0;'; document.body.appendChild(a); a.select(); try { document.execCommand('copy'); showToast('Copied ✓'); } catch (e) { showToast('Copy failed'); } a.remove(); };
+  if (navigator.clipboard && navigator.clipboard.writeText) navigator.clipboard.writeText(t).then(() => showToast('Copied ✓'), old); else old();
+}
+function aiDropEx(x, andAfter) {
+  const i = aiLog.findIndex(e => e.x === x); if (i < 0) return;
+  let end = aiLog.length; if (!andAfter) { end = i + 1; while (end < aiLog.length && aiLog[end].x === x) end++; }
+  const gone = new Set(aiLog.slice(i, end).map(e => e.x)); aiLog.splice(i, end - i); aiHistory = aiHistory.filter(h => !gone.has(h.x));
+  aiSave(); aiShowChat();
+}
+function aiMsgAct(act, btn) {
+  const el = btn.closest('[data-x]'); if (!el) return; const x = el.dataset.x, k = el.dataset.k, ent = aiLog.find(e => e.x === x && e.k === k), user = aiLog.find(e => e.x === x && e.k === 'user');
+  const uq = () => String((user && user.text) || (aiLast && aiLast.q) || '').replace(/^[🎨🎬]\s*/, '');
+  if (act === 'copy') return aiCopyText((ent && ent.text) || el.innerText);
+  if (aiBusy) { showToast('Wait for the current answer to finish'); return; }
+  if (act === 'del') { if (confirm('Delete this message and its answer?')) { if (user) aiDropEx(x, false); else el.remove(); } return; }
+  if (act === 'redo') { const q = uq(); if (!q) return; const pend = aiLast && aiLast.x === x ? aiLast.pending.slice() : []; if (user) aiDropEx(x, false); else el.remove(); aiPending = pend; aiBar(); $id('aiInput').value = q; sendAI(); return; }
+  if (act === 'edit') { const i = aiLog.findIndex(e => e.x === x), later = aiLog.slice(i + 1).some(e => e.k === 'user' && e.x !== x); if (later && !confirm('Editing removes this message and everything after it. Continue?')) return; const q = uq(); aiDropEx(x, true); const inp = $id('aiInput'); inp.value = q; inp.focus(); return; }
+  if (act === 'simple' || act === 'more') { $id('aiInput').value = act === 'simple' ? 'Explain that again in simpler words, with one short real-life example.' : 'Go deeper: give more detail, the steps, and one worked example.'; sendAI(); return; }
+  if (act === 'note') { const text = (ent && ent.text) || ''; if (!text) return; aiRun({ type: 'save_note', kind: 'notes', subject: getSubj('notes'), title: aiClip(uq() || 'AI answer', 40), text }).then(r => { aiRefreshViews(); showToast(r || 'Could not save the note'); }).catch(() => showToast('Could not save the note. Check your browser storage.')); }
+}
 function aiQuick(t) { $id('aiInput').value = t; sendAI(); }
 const aiFmt = s => s < 10 ? s.toFixed(1) + 's' : Math.round(s) + 's';
 
@@ -2207,10 +2250,11 @@ function aiDraw(e, live) {
     m.appendChild(el); aiLoadImg(id); return el;
   } else if (e.k === 'video') {
     el.className = 'ai-bubble'; el.innerHTML = '<div class="ai-md"><p>🎬 <b>' + escapeHtml(e.title || 'Video') + '</b></p><p style="color:var(--muted)">Videos are not kept after you leave. Ask again to regenerate it.</p></div>';
-  } else { el.className = 'ai-bubble'; el.style.borderColor = 'var(--danger)'; el.innerHTML = '<div class="ai-md"><p><b>⚠️ ' + escapeHtml(e.text || 'Error') + '</b></p></div>' + (e.detail ? '<details class="ai-think"><summary>Technical details</summary><pre style="white-space:pre-wrap;font-size:.72rem;margin:6px 0 0;">' + escapeHtml(e.detail) + '</pre></details>' : '') + (live && aiLast ? '<div class="ai-action-row"><button class="ai-mini-btn" onclick="aiRetry()">🔄 Retry</button></div>' : ''); }
+  } else { el.className = 'ai-bubble'; el.style.borderColor = 'var(--danger)'; el.innerHTML = '<div class="ai-md"><p><b>⚠️ ' + escapeHtml(e.text || 'Error') + '</b></p></div>' + (e.detail ? '<details class="ai-think"><summary>Technical details</summary><pre style="white-space:pre-wrap;font-size:.72rem;margin:6px 0 0;">' + escapeHtml(e.detail) + '</pre></details>' : ''); }
+  if (e.x) { el.dataset.x = e.x; el.dataset.k = e.k; const ac = aiActs(e); if (ac) el.insertAdjacentHTML('beforeend', ac); }
   m.appendChild(el); if (live) el.scrollIntoView({ block: 'end' }); return el;
 }
-function aiPush(e) { aiLog.push(e); aiSave(); return aiDraw(e, true); }
+function aiPush(e) { if (!e.x) e.x = aiCurX; aiLog.push(e); aiSave(); return aiDraw(e, true); }
 
 // ---- Snapshot of every section (sent to the AI with each message) ----
 function aiSnapshot(q) {
@@ -2269,7 +2313,7 @@ You can CHANGE the app. When (and only when) the user asks for a change, finish 
 {"type":"generate_image","prompt":"detailed English image prompt"}
 {"type":"make_video","title":"..","scenes":[{"text":"caption (max 140 chars)","image_prompt":"detailed English image prompt"}]}  (4-6 scenes)
 Use ids/idx exactly as in APP DATA. You can't delete notes/files/folders; tell the user to do that with the 🗑️ buttons. For text notes, summaries and study material the user wants kept, use save_note.
-${eduForAI(currentUser) ? `STUDENT PROFILE: ${eduForAI(currentUser)}. Pitch explanations at this level and use this board's terms and exam style. If unsure what this board/class syllabus covers, say so instead of claiming it. Reply in the student's medium when it is a language they use; keep technical terms in English.
+${eduForAI(currentUser) ? `STUDENT PROFILE: ${eduForAI(currentUser)}. Pitch explanations at this level, use this board's terms and exam style, follow the preferred explanation style, and take extra care (simple steps, check understanding) with subjects the student finds hard. If unsure what this board/class syllabus covers, say so instead of claiming it. Reply in the student's medium when it is a language they use; keep technical terms in English.
 ` : ''}=== APP DATA ===
 ${aiSnapshot(q)}`;
 }
@@ -2480,7 +2524,7 @@ async function sendAI() {
   if (aiBusy) return;
   const inp = $id('aiInput'); let q = inp.value.trim();
   if (!q && !aiPending.length) return;
-  aiOpen();
+  aiOpen(); aiCurX = uid();
   if (aiMode === 'image' && q) { inp.value = ''; aiPush({ k: 'user', text: '🎨 ' + q }); aiSetMode('image'); aiShowImage(q); return; }
   const shownQ = q, wantVideo = aiMode === 'video';
   if (wantVideo) { q = 'Make a short explainer video about: ' + (q || 'the attached material') + '. Reply with one short sentence and a make_video action with 4-6 scenes.'; aiSetMode('video'); }
@@ -2504,17 +2548,17 @@ async function sendAI() {
       : p.kind === 'pdf' ? { type: 'document', source: { type: 'base64', media_type: 'application/pdf', data: p.data.split(',')[1] } }
       : { type: 'text', text: '[Attached file: ' + p.name + ']\n' + p.text });
     blocks.push({ type: 'text', text: q || 'Please look at the attached files.' });
-    aiLast = { q: shownQ, pending: aiPending.slice() }; aiPending = []; aiBar();
+    aiLast = { q: shownQ, pending: aiPending.slice(), x: aiCurX }; aiPending = []; aiBar();
     think = document.createElement('div'); think.className = 'ai-thinking'; think.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div> <span>Thinking… 0.0s</span>';
     $id('aiMessages').appendChild(think); think.scrollIntoView({ block: 'end' });
     timer = setInterval(() => { think.lastElementChild.textContent = 'Thinking… ' + aiFmt((performance.now() - T0) / 1000); }, 100);
-    const web = aiWeb || /\b(latest|news|currently|right now|up to date|202\d|search|google|online|look up|sources?|wikipedia|on the web|internet)\b/i.test(shownQ);
-    const payload = { max_tokens: 3000, stream: true, web, system, messages: aiHistory.slice(-12).concat([{ role: 'user', content: blocks }]) };
+    const web = aiWebMode === 'on' ? true : aiWebMode === 'off' ? false : undefined;   // undefined = auto: the server decides when a web search helps
+    const payload = { max_tokens: 3000, stream: true, web, system, messages: aiHistory.slice(-12).map(h => ({ role: h.role, content: h.content })).concat([{ role: 'user', content: blocks }]) };
     const sz = JSON.stringify(payload).length; if (sz > 4200000) { const er = new Error('Attachments are too large: ' + (sz / 1048576).toFixed(1) + ' MB, but the server accepts about 4 MB per message. Remove a file, attach fewer photos, or ask about the folder in two parts.'); er.detail = 'Request size: ' + Math.round(sz / 1024) + ' KB\nFiles: ' + names.join(', '); throw er; }
     let live = null, shown = '';
     const onDelta = txt => {
       if (!live) {
-        clearInterval(timer); if (think) { think.remove(); think = null; } lap('Waited for the first words' + (web ? ' (web search on)' : ''));
+        clearInterval(timer); if (think) { think.remove(); think = null; } lap('Waited for the first words' + (web === false ? '' : web ? ' (web search on)' : ' (web search: auto)'));
         live = document.createElement('div'); live.className = 'ai-bubble'; live.innerHTML = '<div class="ai-md"></div>'; $id('aiMessages').appendChild(live);
       }
       shown = txt;
@@ -2530,7 +2574,7 @@ async function sendAI() {
     const text = raw.replace(/<actions>[\s\S]*?(<\/actions>|$)/i, '').trim();
     if (!wantVideo && !actions.some(a => a && a.type === 'generate_image') && /\b(image|picture|photo|diagram|illustration|drawing|sketch|poster)\b/i.test(shownQ) && /\b(generate|create|make|draw|show|give|need|want|can you|please)\b|\b(image|picture|diagram|photo) of\b/i.test(shownQ))
       actions.push({ type: 'generate_image', prompt: shownQ.slice(0, 300) + (/diagram|illustration/i.test(shownQ) ? ', clean labelled educational illustration, white background' : '') });
-    aiHistory.push({ role: 'user', content: (shownQ || '(attachment)') + (names.length ? '\n[attached: ' + names.join(', ') + ']' : '') }, { role: 'assistant', content: text || '(done)' });
+    aiHistory.push({ role: 'user', content: (shownQ || '(attachment)') + (names.length ? '\n[attached: ' + names.join(', ') + ']' : ''), x: aiCurX }, { role: 'assistant', content: text || '(done)', x: aiCurX });
     if (aiHistory.length > 24) aiHistory = aiHistory.slice(-24);
     const snap = {}; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k.startsWith('sn_') && !k.includes('aichat')) snap[k] = localStorage.getItem(k); }
     const done = [], media = []; let nav = null;
@@ -2552,7 +2596,7 @@ async function sendAI() {
     if (nav) setTimeout(() => aiGoto(nav.page, nav), 1200);
   } catch (e) {
     if (think) think.remove();
-    aiDraw({ k: 'error', text: e.message || 'Connection error. Please try again.', detail: e.detail || (e.stack ? String(e.stack).split('\n').slice(0, 3).join('\n') : '') }, true);
+    aiDraw({ k: 'error', x: aiCurX, text: e.message || 'Connection error. Please try again.', detail: e.detail || (e.stack ? String(e.stack).split('\n').slice(0, 3).join('\n') : '') }, true);
   } finally { if (timer) clearInterval(timer); aiBusy = false; }
 }
 function aiUndoLast(btn) {
@@ -2607,14 +2651,18 @@ function deleteAnn(idx) {
 }
 
 // ===== PROFILE =====
-// ---- Study profile (class, board, stream, medium, target exam) ----
+// ---- Study profile (class, board, stream, medium, exam, hard subjects, study time, style) ----
 const EDU = {
   cls: ['Class 5','Class 6','Class 7','Class 8','Class 9','Class 10','Class 11','Class 12','College / other'],
-  board: ['CBSE','ICSE','ISC','NIOS','State Board','IB','Cambridge','Other'],
-  state: ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Jammu & Kashmir','Ladakh','Puducherry','Chandigarh','Other'],
+  board: ['CBSE','ICSE','ISC','NIOS','IB','Cambridge (IGCSE / A-Level)','UP Board','Maharashtra Board','Tamil Nadu Board','Karnataka Board','West Bengal Board','Bihar Board','Rajasthan Board','Gujarat Board','MP Board','Telangana Board','Kerala Board','Other State Board','Other'],
+  state: ['Andhra Pradesh','Arunachal Pradesh','Assam','Chhattisgarh','Delhi','Goa','Haryana','Himachal Pradesh','Jharkhand','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Sikkim','Tripura','Uttarakhand','Jammu & Kashmir','Ladakh','Puducherry','Chandigarh','Other'],
   stream: ['Science (PCM)','Science (PCB)','Science (PCMB)','Commerce','Arts / Humanities','Other'],
   medium: ['English','Hindi','Hinglish','Marathi','Gujarati','Bengali','Tamil','Telugu','Kannada','Malayalam','Punjabi','Odia','Assamese','Urdu','Other'],
-  exam: ['None','JEE Main / Advanced','NEET','CUET','Olympiads','NTSE','CLAT','CA Foundation','Board exams only','Other']
+  exam: ['None','JEE Main / Advanced','NEET','CUET','Olympiads','NTSE','CLAT','CA Foundation','Board exams only','Other'],
+  year: ['2026','2027','2028','2029','2030'],
+  hours: ['Under 1 hour','1–2 hours','2–4 hours','4–6 hours','6+ hours'],
+  style: ['Simple & short','Step-by-step','Detailed with examples','Exam-focused (key points & formulas)'],
+  hard: ['Maths','Physics','Chemistry','Biology','English','Hindi','Social Science','Computer Science','Accountancy','Economics']
 };
 function eduFill(id, label, list, val) {
   const el = document.getElementById(id); if (!el) return;
@@ -2622,34 +2670,50 @@ function eduFill(id, label, list, val) {
 }
 function eduToggle() {
   const cls = document.getElementById('editCls').value, board = document.getElementById('editBoard').value;
-  document.getElementById('editState').style.display = board === 'State Board' ? '' : 'none';
+  document.getElementById('editState').style.display = board === 'Other State Board' ? '' : 'none';
   document.getElementById('editStream').style.display = (cls === 'Class 11' || cls === 'Class 12') ? '' : 'none';
 }
+function eduBoardLabel(e) { return e.board === 'Other State Board' && e.state ? e.state + ' State Board' : e.board; }
 function eduRender(me) {
   const e = me.edu || {};
   eduFill('editCls', 'Class', EDU.cls, e.cls);
-  eduFill('editBoard', 'Board', EDU.board, e.board);
-  eduFill('editState', 'State (for State Board)', EDU.state, e.state);
+  eduFill('editBoard', 'Board (CBSE, ICSE, state boards…)', EDU.board, e.board);
+  eduFill('editState', 'Which state?', EDU.state, e.state);
   eduFill('editStream', 'Stream (Class 11–12)', EDU.stream, e.stream);
   eduFill('editMedium', 'Medium of study', EDU.medium, e.medium);
   eduFill('editExam', 'Target exam', EDU.exam, e.exam);
+  eduFill('editYear', 'Exam year', EDU.year, e.year);
+  eduFill('editHours', 'Study time per day', EDU.hours, e.hours);
+  eduFill('editStyle', 'How should the AI explain?', EDU.style, e.style);
+  const hard = Array.isArray(e.hard) ? e.hard : [];
+  document.getElementById('editHard').innerHTML = EDU.hard.map(h => `<label class="edu-chip"><input type="checkbox" value="${escapeHtml(h)}"${hard.includes(h) ? ' checked' : ''}> ${escapeHtml(h)}</label>`).join('');
   document.getElementById('editSchool').value = e.school || '';
   eduToggle();
   const box = document.getElementById('pfStudies');
-  const parts = [e.cls, e.board === 'State Board' && e.state ? e.state + ' State Board' : e.board, (e.cls === 'Class 11' || e.cls === 'Class 12') ? e.stream : '', e.medium && e.medium + ' medium', e.exam && e.exam !== 'None' ? 'Prep: ' + e.exam : ''].filter(Boolean);
+  const parts = [e.cls, eduBoardLabel(e), (e.cls === 'Class 11' || e.cls === 'Class 12') ? e.stream : '', e.medium && e.medium + ' medium', e.exam && e.exam !== 'None' ? 'Prep: ' + e.exam + (e.year ? ' ' + e.year : '') : '', e.hours && e.hours + '/day', hard.length ? 'Hard: ' + hard.join(', ') : ''].filter(Boolean);
   if (parts.length) { box.style.display = ''; box.innerHTML = `<span class="profile-field-label">Studies</span><span class="profile-field-val">${parts.map(escapeHtml).join(' · ')}</span>`; }
   else box.style.display = 'none';
+}
+function eduRead() {
+  const g = id => (document.getElementById(id).value || '').trim(), cls = g('editCls'), board = g('editBoard');
+  return { cls, board, state: board === 'Other State Board' ? g('editState') : '', stream: (cls === 'Class 11' || cls === 'Class 12') ? g('editStream') : '',
+    medium: g('editMedium'), exam: g('editExam'), year: g('editYear'), hours: g('editHours'), style: g('editStyle'),
+    hard: Array.from(document.querySelectorAll('#editHard input:checked')).map(i => i.value), school: g('editSchool').slice(0, 80) };
 }
 // Short, school-free line for the AI. Only whitelisted values from EDU are ever sent.
 function eduForAI(u) {
   const e = (u && u.edu) || {}, ok = (k, v) => v && EDU[k].includes(v) ? v : '';
-  const cls = ok('cls', e.cls), board = ok('board', e.board), state = ok('state', e.state), stream = ok('stream', e.stream), medium = ok('medium', e.medium), exam = ok('exam', e.exam);
+  const cls = ok('cls', e.cls), board = ok('board', e.board), state = ok('state', e.state), stream = ok('stream', e.stream), medium = ok('medium', e.medium), exam = ok('exam', e.exam), year = ok('year', e.year), hours = ok('hours', e.hours), style = ok('style', e.style);
+  const hard = (Array.isArray(e.hard) ? e.hard : []).filter(h => EDU.hard.includes(h));
   const bits = [];
   if (cls) bits.push('class=' + cls);
-  if (board) bits.push('board=' + board + (board === 'State Board' && state ? ' (' + state + ')' : ''));
+  if (board) bits.push('board=' + board + (board === 'Other State Board' && state ? ' (' + state + ')' : ''));
   if (stream && (cls === 'Class 11' || cls === 'Class 12')) bits.push('stream=' + stream);
   if (medium) bits.push('medium=' + medium);
-  if (exam && exam !== 'None') bits.push('target exam=' + exam);
+  if (exam && exam !== 'None') bits.push('target exam=' + exam + (year ? ' in ' + year : ''));
+  if (hours) bits.push('studies ' + hours + ' per day');
+  if (hard.length) bits.push('finds these subjects hard=' + hard.join('/'));
+  if (style) bits.push('prefers explanations: ' + style);
   return bits.join(', ');
 }
 function renderProfile() {
@@ -2742,12 +2806,7 @@ function saveProfile() {
   users[currentUser.username].age = age;
   const g = id => (document.getElementById(id).value || '').trim();
   const cls = g('editCls'), board = g('editBoard');
-  users[currentUser.username].edu = {
-    cls, board,
-    state: board === 'State Board' ? g('editState') : '',
-    stream: (cls === 'Class 11' || cls === 'Class 12') ? g('editStream') : '',
-    medium: g('editMedium'), exam: g('editExam'), school: g('editSchool').slice(0, 80)
-  };
+  users[currentUser.username].edu = eduRead();
   storeSet('users', users);
   currentUser = users[currentUser.username];
   renderProfile();
