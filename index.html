@@ -457,6 +457,7 @@
         <button class="btn btn-accent" style="flex:1;" onclick="sendAI()">Send ✨</button>
       </div>
     </div>
+    <div style="font-size:.66rem;color:var(--muted);text-align:center;margin-top:6px;">AI can make mistakes. Tap 🔍 Verify under an answer to double-check important facts.</div>
     </div>
     <input type="file" id="aiFileInput" multiple accept="image/*,application/pdf,text/*,.txt,.md,.csv,.json" style="display:none;" onchange="aiAddFiles(Array.from(this.files));this.value='';">
   </div>
@@ -500,6 +501,16 @@
       <div class="edu-chips" id="editHard"></div>
       <input class="inp" id="editSchool" placeholder="School (optional, never sent to the AI)" maxlength="80" style="margin-bottom:10px;">
       <button class="btn btn-primary w-full" onclick="saveProfile()">Save Changes</button>
+    </div>
+    <div class="card mt-12" id="privacyCard">
+      <div style="font-weight:600;margin-bottom:10px;">🔒 Privacy &amp; my data</div>
+      <div style="display:flex;flex-direction:column;gap:8px;">
+        <button class="btn btn-ghost w-full" onclick="privacyModal()">📄 Privacy notice (what the AI sees)</button>
+        <button class="btn btn-ghost w-full" onclick="exportMyData()">⬇️ Download a backup of my data</button>
+        <button class="btn btn-ghost w-full" onclick="document.getElementById('importFile').click()">⬆️ Restore from a backup file</button>
+        <button class="btn w-full" style="background:rgba(239,68,68,.15);color:var(--danger);" onclick="deleteMyAccount()">🗑️ Delete my account and data</button>
+      </div>
+      <input type="file" id="importFile" accept="application/json,.json" style="display:none;" onchange="importMyData(this.files[0]);this.value='';">
     </div>
     <div class="card mt-12" id="adminPanel" style="display:none;">
       <div style="font-weight:700;color:var(--accent3);margin-bottom:14px;">⚡ Admin Panel</div>
@@ -815,20 +826,34 @@ function switchAuthTab(tab) {
   document.getElementById('signupForm').style.display = tab === 'signup' ? 'flex' : 'none';
 }
 
-function doLogin() {
+// Passwords are stored only as salted PBKDF2 hashes. Old plain-text records are upgraded the first time that user signs in.
+const pwOK = () => !!(window.crypto && crypto.subtle && crypto.subtle.deriveBits);
+async function pwHash(p, saltB64) {
+  const b64 = a => btoa(String.fromCharCode.apply(null, Array.from(new Uint8Array(a))));
+  const salt = saltB64 ? Uint8Array.from(atob(saltB64), c => c.charCodeAt(0)) : crypto.getRandomValues(new Uint8Array(16));
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(p), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations: 150000, hash: 'SHA-256' }, key, 256);
+  return { salt: b64(salt), hash: b64(bits) };
+}
+async function doLogin() {
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value;
   const users = storeGet('users') || {};
   const err = document.getElementById('loginErr');
-  if (!users[u] || users[u].password !== p) { err.textContent = 'Invalid username or password'; err.style.display='block'; return; }
-  currentUser = users[u];
+  const rec = Object.prototype.hasOwnProperty.call(users, u) ? users[u] : null; let ok = false;
+  try {
+    if (rec && rec.pwh && pwOK()) ok = (await pwHash(p, rec.salt)).hash === rec.pwh;
+    else if (rec && rec.password != null) { ok = rec.password === p; if (ok && pwOK()) { const hh = await pwHash(p); rec.salt = hh.salt; rec.pwh = hh.hash; delete rec.password; storeSet('users', users); } }
+  } catch (e) { ok = false; }
+  if (!ok) { err.textContent = 'Invalid username or password'; err.style.display='block'; return; }
+  currentUser = rec;
   storeSet('session', u);
   err.style.display='none';
   if (currentUser.suspended) { showSuspended(); return; }
   showApp();
 }
 
-function doSignup() {
+async function doSignup() {
   const name = document.getElementById('signupName').value.trim();
   const u = document.getElementById('signupUser').value.trim().toLowerCase();
   const p = document.getElementById('signupPass').value;
@@ -836,10 +861,13 @@ function doSignup() {
   const err = document.getElementById('signupErr');
   if (!name || !u || !p || !age) { err.textContent = 'Please fill all fields'; err.style.display='block'; return; }
   if (name.length < 3) { err.textContent = 'Please use your real full name'; err.style.display='block'; return; }
+  if (!/^[a-z0-9_.-]{3,24}$/.test(u)) { err.textContent = 'Username: 3–24 letters, numbers, dot, dash or underscore'; err.style.display='block'; return; }
+  if (p.length < 6) { err.textContent = 'Password must be at least 6 characters'; err.style.display='block'; return; }
   const users = storeGet('users') || {};
-  if (users[u]) { err.textContent = 'Username taken'; err.style.display='block'; return; }
+  if (Object.prototype.hasOwnProperty.call(users, u)) { err.textContent = 'Username taken'; err.style.display='block'; return; }
   const isFirstAdmin = Object.keys(users).length === 0 || u === ADMIN_USER;
-  const newUser = { username: u, name, password: p, age: parseInt(age), role: isFirstAdmin ? 'admin' : 'student', pfp: null, suspended: false, friends: [], pendingOut: [], pendingIn: [], joinedAt: Date.now() };
+  const newUser = { username: u, name, age: parseInt(age), role: isFirstAdmin ? 'admin' : 'student', pfp: null, suspended: false, friends: [], pendingOut: [], pendingIn: [], joinedAt: Date.now() };
+  if (pwOK()) { const hh = await pwHash(p); newUser.salt = hh.salt; newUser.pwh = hh.hash; } else newUser.password = p;
   users[u] = newUser;
   storeSet('users', users);
   currentUser = newUser;
@@ -952,7 +980,7 @@ function formatDate(ts) {
   const d = new Date(ts);
   return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
 }
-function escapeHtml(s) { return (s || '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>'); }
+function escapeHtml(s) { return String(s == null ? '' : s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/\n/g, '<br>'); }
 function detectMime(dataUrl) { const m = dataUrl.match(/^data:(image\/[a-z0-9.+-]+);base64,/i); return m ? m[1] : 'image/jpeg'; }
 
 // Calls the Worker AI proxy at /api/ai. The Anthropic API key stays on the server.
@@ -1662,7 +1690,7 @@ function openShareModal() {
     const isShared = sharedWith.includes(u.username);
     html += `<div class="user-list-item">
       <div class="user-avatar">${u.pfp ? `<img src="${u.pfp}">` : (u.name[0].toUpperCase())}</div>
-      <div class="user-info"><div class="user-name">${u.name}</div><div class="user-status">@${u.username}</div></div>
+      <div class="user-info"><div class="user-name">${escapeHtml(u.name)}</div><div class="user-status">@${escapeHtml(u.username)}</div></div>
       <button class="user-action ${isShared ? 'ua-friend' : 'ua-invite'}" onclick="toggleShare('${u.username}',this)">${isShared ? '✓ Shared' : 'Share'}</button>
     </div>`;
   });
@@ -1868,9 +1896,9 @@ function renderFriendSearch(content) {
     else if (isPendingOut) actionBtn = `<button class="user-action ua-pending">Pending…</button>`;
     else if (isPendingIn) actionBtn = `<button class="user-action ua-invite" onclick="acceptFriend('${u.username}')">Accept</button>`;
     else actionBtn = `<button class="user-action ua-invite" onclick="inviteFriend('${u.username}')">+ Invite</button>`;
-    html += `<div class="user-list-item" data-name="${u.name.toLowerCase()} ${u.username.toLowerCase()}">
+    html += `<div class="user-list-item" data-name="${escapeHtml(u.name.toLowerCase() + ' ' + u.username.toLowerCase())}">
       <div class="user-avatar">${u.pfp?`<img src="${u.pfp}">`:(u.name[0].toUpperCase())}</div>
-      <div class="user-info"><div class="user-name">${u.name} ${u.role==='admin'?'<span class="admin-badge">ADMIN</span>':''}</div><div class="user-status">@${u.username}</div></div>
+      <div class="user-info"><div class="user-name">${escapeHtml(u.name)} ${u.role==='admin'?'<span class="admin-badge">ADMIN</span>':''}</div><div class="user-status">@${escapeHtml(u.username)}</div></div>
       ${actionBtn}
     </div>`;
   });
@@ -1937,7 +1965,7 @@ function renderFriendList(content) {
       if(!user) return;
       html += `<div class="user-list-item">
         <div class="user-avatar">${user.pfp?`<img src="${user.pfp}">`:(user.name[0].toUpperCase())}</div>
-        <div class="user-info"><div class="user-name">${user.name}</div><div class="user-status">@${user.username}</div></div>
+        <div class="user-info"><div class="user-name">${escapeHtml(user.name)}</div><div class="user-status">@${escapeHtml(user.username)}</div></div>
         <button class="user-action ua-invite" onclick="acceptFriend('${u}')">Accept</button>
       </div>`;
     });
@@ -1950,7 +1978,7 @@ function renderFriendList(content) {
       if(!user) return;
       html += `<div class="user-list-item" onclick="openChat('${u}')">
         <div class="user-avatar">${user.pfp?`<img src="${user.pfp}">`:(user.name[0].toUpperCase())}</div>
-        <div class="user-info"><div class="user-name">${user.name}</div><div class="user-status">@${user.username} · Tap to chat</div></div>
+        <div class="user-info"><div class="user-name">${escapeHtml(user.name)}</div><div class="user-status">@${escapeHtml(user.username)} · Tap to chat</div></div>
         <span>💬</span>
       </div>`;
       // Check if they've shared notes with us
@@ -2259,12 +2287,56 @@ function aiUsageModal() {
     <div style="display:flex;gap:8px;margin-top:12px;"><button class="btn btn-ghost" style="flex:1;" onclick="aiOpenTest()">🔧 Full AI test</button><button class="btn btn-accent" style="flex:1;" onclick="closeModalDirect()">Close</button></div>`);
   fetch('/api/ai').then(r => r.json()).then(d => { const el = $id('aiConn'); if (!el) return; const n = d.gemini_keys_found || 0; el.innerHTML = row('Gemini keys', n || 'none') + (d.grok_keys_found ? row('Grok keys', d.grok_keys_found) : '') + (d.cohere_keys_found ? row('Cohere keys', d.cohere_keys_found) : '') + row('OpenRouter', d.openrouter_key_found ? 'connected' : 'not set') + row('Free backup AI', 'always on'); el.style.color = 'var(--text)'; }).catch(() => { const el = $id('aiConn'); if (el) el.textContent = 'Could not check right now.'; });
 }
+// ===== PRIVACY & DATA =====
+function privacyModal() {
+  openModal(`<div class="modal-title">🔒 Privacy notice</div><div style="font-size:.82rem;line-height:1.65;max-height:66vh;overflow:auto;">
+    <p><b>Where your data lives.</b> Your account, notes, homework and chats are saved in this browser on this device. They are not uploaded anywhere unless you turn on Cloud backup (if your school or you enabled it).</p>
+    <p><b>What the AI tutor receives.</b> Your question, your recent chat, the text of notes, homework and timetable entries that are relevant, any files you attach, and your study profile (class, board, stream, medium, exam, study time, hard subjects, preferred explanation style). It does <b>not</b> receive your name, username, age or school.</p>
+    <p><b>Who processes it.</b> Your question is sent to AI services such as Google Gemini, OpenRouter, Cohere or xAI, and to web search (Google or Wikipedia) when a question needs it. Free AI plans may keep or review prompts under their own rules, so <b>never type passwords, phone numbers, addresses or private details into the AI.</b></p>
+    <p><b>Passwords</b> are stored only as salted hashes in this browser. Old plain-text passwords are upgraded the next time you sign in.</p>
+    <p><b>Your control.</b> You can download a backup, restore it, or delete your account and data from this page at any time. Photos and PDFs you added to notes are kept in the browser's file storage, so they are not inside the backup file.</p>
+    <p><b>If you are under 18,</b> please use StudyNest with a parent or teacher's knowledge. AI answers can be wrong: check important facts in your textbook or on official sites.</p>
+    </div><button class="btn btn-accent" style="width:100%;margin-top:12px;" onclick="closeModalDirect()">Close</button>`);
+}
+function myKeyRe() { const u = String(currentUser.username).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); return new RegExp('(^|_)' + u + '(_|$)'); }
+function myDataKeys() { const re = myKeyRe(), out = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('sn_') && !['sn_users', 'sn_session'].includes(k) && re.test(k.slice(3))) out.push(k); } return out; }
+function exportMyData() {
+  const users = storeGet('users') || {}, me = Object.assign({}, users[currentUser.username] || currentUser); ['password', 'pwh', 'salt'].forEach(k => delete me[k]);
+  const data = { app: 'StudyNest', version: 1, exportedAt: new Date().toISOString(), username: currentUser.username, profile: me, keys: {} };
+  myDataKeys().forEach(k => { data.keys[k] = localStorage.getItem(k); });
+  const blob = new Blob([JSON.stringify(data)], { type: 'application/json' }), a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'studynest-backup-' + currentUser.username + '-' + new Date().toISOString().slice(0, 10) + '.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
+  showToast('Backup downloaded. Photos and PDFs are not inside it.');
+}
+function importMyData(file) {
+  if (!file) return; const r = new FileReader();
+  r.onload = () => {
+    try {
+      const d = JSON.parse(r.result); if (!d || d.app !== 'StudyNest' || !d.keys || typeof d.keys !== 'object') throw new Error('bad');
+      if (d.username !== currentUser.username) { showToast('This backup belongs to @' + String(d.username).slice(0, 24) + ', not to you.'); return; }
+      const re = myKeyRe(), ks = Object.keys(d.keys).filter(k => k.startsWith('sn_') && re.test(k.slice(3)) && typeof d.keys[k] === 'string');
+      if (!ks.length) { showToast('No data found in that file.'); return; }
+      if (!confirm('Restore ' + ks.length + ' items? This replaces matching data on this device.')) return;
+      ks.forEach(k => { try { JSON.parse(d.keys[k]); localStorage.setItem(k, d.keys[k]); } catch (e) {} });
+      const users = storeGet('users') || {}, me = users[currentUser.username]; if (me && d.profile && d.profile.edu) { me.edu = d.profile.edu; storeSet('users', users); currentUser = me; }
+      showToast('Restored ✓ Reloading…'); setTimeout(() => location.reload(), 700);
+    } catch (e) { showToast('That is not a valid StudyNest backup.'); }
+  };
+  r.readAsText(file);
+}
+function deleteMyAccount() {
+  if (!confirm('Delete your account and ALL your data on this device? This cannot be undone.')) return;
+  const typed = prompt('Type your username (' + currentUser.username + ') to confirm:'); if ((typed || '').trim().toLowerCase() !== currentUser.username) { showToast('Cancelled: username did not match.'); return; }
+  const u = currentUser.username; myDataKeys().forEach(k => localStorage.removeItem(k));
+  const users = storeGet('users') || {}; delete users[u]; Object.keys(users).forEach(k => { ['friends', 'pendingOut', 'pendingIn'].forEach(f => { if (Array.isArray(users[k][f])) users[k][f] = users[k][f].filter(x => x !== u); }); }); storeSet('users', users);
+  storeSet('session', null); currentUser = null; aiLoadedFor = null; aiStore = null; showAuth(); showToast('Your account and data were deleted from this device.');
+}
 function aiOpenTest() { window.open('/api/ai?test=1', '_blank', 'noopener'); }
-let aiRaf = 0, aiCurX = null;
+let aiRaf = 0, aiCurX = null, aiForceWeb = false;
 function aiActs(e) {
   const b = (a, l, t) => `<button class="ai-mini-btn" title="${t}" onclick="aiMsgAct('${a}',this)">${l}</button>`;
   if (e.k === 'user') return '<div class="ai-msg-actions">' + (/^[🎨🎬]/.test(e.text || '') ? '' : b('edit', '✏️ Edit', 'Edit and resend')) + b('copy', '📋 Copy', 'Copy') + b('del', '🗑️ Delete', 'Delete this message and its answer') + '</div>';
-  if (e.k === 'ai') return '<div class="ai-msg-actions">' + b('copy', '📋 Copy', 'Copy answer') + b('redo', '🔄 Redo', 'Ask again') + b('simple', '✂️ Simpler', 'Explain more simply') + b('more', '➕ Deeper', 'More detail') + b('note', '📓 Save', 'Save to Notes') + b('del', '🗑️ Delete', 'Delete') + '</div>';
+  if (e.k === 'ai') return '<div class="ai-msg-actions">' + b('copy', '📋 Copy', 'Copy answer') + b('redo', '🔄 Redo', 'Ask again') + b('verify', '🔍 Verify', 'Double-check this answer with the web') + b('simple', '✂️ Simpler', 'Explain more simply') + b('more', '➕ Deeper', 'More detail') + b('note', '📓 Save', 'Save to Notes') + b('del', '🗑️ Delete', 'Delete') + '</div>';
   if (e.k === 'error') return '<div class="ai-msg-actions">' + b('redo', '🔄 Retry', 'Send again') + b('del', '🗑️ Delete', 'Remove this message') + '</div>';
   return '';
 }
@@ -2286,6 +2358,7 @@ function aiMsgAct(act, btn) {
   if (act === 'del') { if (confirm('Delete this message and its answer?')) { if (user) aiDropEx(x, false); else el.remove(); } return; }
   if (act === 'redo') { const q = uq(); if (!q) return; const pend = aiLast && aiLast.x === x ? aiLast.pending.slice() : []; if (user) aiDropEx(x, false); else el.remove(); aiPending = pend; aiBar(); $id('aiInput').value = q; sendAI(); return; }
   if (act === 'edit') { const i = aiLog.findIndex(e => e.x === x), later = aiLog.slice(i + 1).some(e => e.k === 'user' && e.x !== x); if (later && !confirm('Editing removes this message and everything after it. Continue?')) return; const q = uq(); aiDropEx(x, true); const inp = $id('aiInput'); inp.value = q; inp.focus(); return; }
+  if (act === 'verify') { aiForceWeb = true; $id('aiInput').value = 'Fact-check your previous answer. Re-do any calculation from scratch and check every fact against reliable sources. Reply with: ✅ what is correct, ⚠️ anything wrong or uncertain with the fix, and what I should confirm in my textbook or on an official site. Do not repeat the whole answer.'; sendAI(); return; }
   if (act === 'simple' || act === 'more') { $id('aiInput').value = act === 'simple' ? 'Explain that again in simpler words, with one short real-life example.' : 'Go deeper: give more detail, the steps, and one worked example.'; sendAI(); return; }
   if (act === 'note') { const text = (ent && ent.text) || ''; if (!text) return; aiRun({ type: 'save_note', kind: 'notes', subject: getSubj('notes'), title: aiClip(uq() || 'AI answer', 40), text }).then(r => { aiRefreshViews(); showToast(r || 'Could not save the note'); }).catch(() => showToast('Could not save the note. Check your browser storage.')); }
 }
@@ -2350,7 +2423,7 @@ function aiSnapshot(q) {
   const has = re => re.test(ql), folderHit = ['notes', 'qp'].some(k => AI_SUBJECTS.some(s => getFolders(k, s).some(f => f.name.length >= 3 && ql.includes(f.name.toLowerCase()))));
   // Only send the detailed file list when the question is about notes/papers; otherwise just folder names (much smaller and faster).
   const deep = folderHit || has(/note|paper|qp|folder|chapter|summar|quiz|test|exam|revis|explain|photo|image|pdf|file|handwrit|label|star|save|this|these|teach|doubt|solve|question|answer|topic|lesson|study/);
-  L.push(`USER: ${u.name} (@${u.username}), role=${u.role || 'student'}, age=${u.age || '?'}. Today: ${new Date().toDateString()}.`);
+  L.push(`USER: role=${u.role || 'student'} (name, username and age are deliberately not shared with you). Today: ${new Date().toDateString()}.`);
   ['notes', 'qp'].forEach(kind => {
     L.push(kind === 'qp' ? 'QUESTION PAPERS (kind=qp):' : 'NOTES (kind=notes):');
     AI_SUBJECTS.forEach(s => {
@@ -2377,7 +2450,7 @@ function aiSnapshot(q) {
     const anns = (storeGet('announcements') || []).slice(-5);
     L.push('ANNOUNCEMENTS: ' + (anns.length ? anns.map(a => `"${aiClip(a.title, 60)}": ${aiClip(a.body, 160)}`).join(' | ') : 'none'));
   }
-  if (has(/friend|buddy|classmate|chat/)) { const me = users[u.username] || {}; L.push('FRIENDS: ' + ((me.friends || []).map(f => users[f] ? users[f].name : f).join(', ') || 'none')); }
+  if (has(/friend|buddy|classmate|chat/)) { const me = users[u.username] || {}; L.push('FRIENDS: ' + ((me.friends || []).map(f => users[f] ? String(users[f].name).split(' ')[0] : 'friend').join(', ') || 'none')); }
   L.push('(Seats, announcements and friends are only listed when the user asks about them.)');
   return L.join('\n').slice(0, 14000);
 }
@@ -2401,7 +2474,7 @@ You can CHANGE the app. When (and only when) the user asks for a change, finish 
 {"type":"generate_image","prompt":"detailed English image prompt"}
 {"type":"make_video","title":"..","scenes":[{"text":"caption (max 140 chars)","image_prompt":"detailed English image prompt"}]}  (4-6 scenes)
 Use ids/idx exactly as in APP DATA. You can't delete notes/files/folders; tell the user to do that with the 🗑️ buttons. For text notes, summaries and study material the user wants kept, use save_note.
-${eduForAI(currentUser) ? `STUDENT PROFILE: ${eduForAI(currentUser)}. Pitch explanations at this level, use this board's terms and exam style, follow the preferred explanation style, and take extra care (simple steps, check understanding) with subjects the student finds hard. If unsure what this board/class syllabus covers, say so instead of claiming it. Reply in the student's medium when it is a language they use; keep technical terms in English.
+ACCURACY RULES: be correct before being fast. For maths, physics and chemistry show the working step by step and re-check the final number. Never invent facts, quotes, page numbers, links or sources; if unsure, say "I'm not sure" and say what to check. For exam dates, results, cut-offs, fees or syllabus changes, tell the student to confirm on the official board or exam website. Do not say you searched the web unless WEB RESULTS are given below. If a question is ambiguous, ask one short question instead of guessing.\n${eduForAI(currentUser) ? `STUDENT PROFILE: ${eduForAI(currentUser)}. Pitch explanations at this level, use this board's terms and exam style, follow the preferred explanation style, and take extra care (simple steps, check understanding) with subjects the student finds hard. If unsure what this board/class syllabus covers, say so instead of claiming it. Reply in the student's medium when it is a language they use; keep technical terms in English.
 ` : ''}=== APP DATA ===
 ${aiSnapshot(q)}`;
 }
@@ -2640,7 +2713,7 @@ async function sendAI() {
     think = document.createElement('div'); think.className = 'ai-thinking'; think.innerHTML = '<div class="dot"></div><div class="dot"></div><div class="dot"></div> <span>Thinking… 0.0s</span>';
     $id('aiMessages').appendChild(think); think.scrollIntoView({ block: 'end' });
     timer = setInterval(() => { think.lastElementChild.textContent = 'Thinking… ' + aiFmt((performance.now() - T0) / 1000); }, 100);
-    const web = aiWebMode === 'on' ? true : aiWebMode === 'off' ? false : undefined;   // undefined = auto: the server decides when a web search helps
+    const web = aiForceWeb || aiWebMode === 'on' ? true : aiWebMode === 'off' ? false : undefined; aiForceWeb = false;   // undefined = auto: the server decides when a web search helps
     const payload = { max_tokens: 3000, stream: true, web, system, messages: aiHistory.slice(-12).map(h => ({ role: h.role, content: h.content })).concat([{ role: 'user', content: blocks }]) };
     const sz = JSON.stringify(payload).length; if (sz > 4200000) { const er = new Error('Attachments are too large: ' + (sz / 1048576).toFixed(1) + ' MB, but the server accepts about 4 MB per message. Remove a file, attach fewer photos, or ask about the folder in two parts.'); er.detail = 'Request size: ' + Math.round(sz / 1024) + ' KB\nFiles: ' + names.join(', '); throw er; }
     let live = null, shown = '';
@@ -2814,9 +2887,9 @@ function renderProfile() {
   else pfpBig.textContent = me.name[0].toUpperCase();
   document.getElementById('profileNameDisplay').textContent = me.name;
   document.getElementById('profileRoleDisplay').textContent = me.role === 'admin' ? '⚡ Admin' : '🎓 Student';
-  document.getElementById('pfName').innerHTML = `<span class="profile-field-label">Full Name</span><span class="profile-field-val">${me.name}</span>`;
+  document.getElementById('pfName').innerHTML = `<span class="profile-field-label">Full Name</span><span class="profile-field-val">${escapeHtml(me.name)}</span>`;
   document.getElementById('pfAge').innerHTML = `<span class="profile-field-label">Age</span><span class="profile-field-val">${me.age}</span>`;
-  document.getElementById('pfUsername').innerHTML = `<span class="profile-field-label">Username</span><span class="profile-field-val">@${me.username}</span>`;
+  document.getElementById('pfUsername').innerHTML = `<span class="profile-field-label">Username</span><span class="profile-field-val">@${escapeHtml(me.username)}</span>`;
   document.getElementById('editAge').value = me.age;
   eduRender(me);
 
@@ -2830,8 +2903,8 @@ function renderProfile() {
       html += `<div class="user-list-item" onclick="openUserOptions('${u.username}')">
         <div class="user-avatar">${u.pfp?`<img src="${u.pfp}">`:(u.name[0].toUpperCase())}</div>
         <div class="user-info">
-          <div class="user-name">${u.name} ${u.role==='admin'?'<span class="admin-badge">ADMIN</span>':''} ${u.suspended?'<span class="badge badge-danger" style="background:rgba(239,68,68,0.2);color:#f87171;padding:2px 8px;border-radius:20px;font-size:0.65rem;">SUSPENDED</span>':''}</div>
-          <div class="user-status">@${u.username} · Age ${u.age}</div>
+          <div class="user-name">${escapeHtml(u.name)} ${u.role==='admin'?'<span class="admin-badge">ADMIN</span>':''} ${u.suspended?'<span class="badge badge-danger" style="background:rgba(239,68,68,0.2);color:#f87171;padding:2px 8px;border-radius:20px;font-size:0.65rem;">SUSPENDED</span>':''}</div>
+          <div class="user-status">@${escapeHtml(u.username)} · Age ${u.age}</div>
         </div>
         <span style="color:var(--muted);">›</span>
       </div>`;
@@ -2843,7 +2916,7 @@ function renderProfile() {
 function openUserOptions(username) {
   const users = storeGet('users') || {};
   const u = users[username];
-  openModal(`<div class="modal-title">👤 ${u.name}</div>
+  openModal(`<div class="modal-title">👤 ${escapeHtml(u.name)}</div>
     <div class="action-sheet-item" onclick="viewUserProfile('${username}')">👤 View Profile</div>
     ${currentUser.role==='admin'?`
     <div class="action-sheet-item" onclick="toggleAdmin('${username}')">${u.role==='admin'?'👤 Remove Admin':'⚡ Make Admin'}</div>
@@ -2858,10 +2931,10 @@ function viewUserProfile(username) {
   closeModalDirect();
   openModal(`<div class="profile-header" style="padding:12px 0;">
     <div class="profile-pfp" style="cursor:default;">${u.pfp?`<img src="${u.pfp}">`:(u.name[0].toUpperCase())}</div>
-    <div class="profile-name">${u.name}</div>
+    <div class="profile-name">${escapeHtml(u.name)}</div>
     <div class="profile-role">${u.role==='admin'?'⚡ Admin':'🎓 Student'}</div>
   </div>
-  <div class="profile-field"><span class="profile-field-label">Username</span><span>@${u.username}</span></div>
+  <div class="profile-field"><span class="profile-field-label">Username</span><span>@${escapeHtml(u.username)}</span></div>
   <div class="profile-field"><span class="profile-field-label">Age</span><span>${u.age}</span></div>
   <div class="profile-field"><span class="profile-field-label">Member since</span><span>${new Date(u.joinedAt).toLocaleDateString()}</span></div>
   `);
