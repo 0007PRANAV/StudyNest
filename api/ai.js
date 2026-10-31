@@ -33,7 +33,14 @@ function getKeys(E) {
     else if (/^sk-or-/.test(v)) openrouter = openrouter || v;
     else if (/^(AIza|AQ\.)/.test(v) || ((n.includes('GEMINI') || n.includes('GOOGLE')) && n.includes('KEY') && v.length > 20)) add(v);
   }
-  return { anthropic, gemini: g, openrouter, provider: String(envKey(E, ['AI_PROVIDER']) || '').toLowerCase() };
+  const compat = {}, cohere = [];
+  for (const name of Object.keys(E || {})) {   // Grok/xAI, Groq, Cerebras, Mistral and Cohere keys are found by variable name
+    const raw = E[name]; if (typeof raw !== 'string') continue; const v = cleanVal(raw), n = name.toUpperCase();
+    if (v.length < 15 || !/KEY|TOKEN/.test(n)) continue;
+    for (const id of Object.keys(COMPAT)) if (COMPAT[id].names(n) && !(compat[id] || []).includes(v)) (compat[id] = compat[id] || []).push(v);
+    if (/COHERE/.test(n) && !cohere.includes(v)) cohere.push(v);
+  }
+  return { anthropic, gemini: g, openrouter, compat, cohere, provider: String(envKey(E, ['AI_PROVIDER']) || '').toLowerCase() };
 }
 async function postJSON(url, headers, body, ms, method) {
   const ac = new AbortController(), t = setTimeout(() => ac.abort(), ms || 40000);
@@ -57,12 +64,13 @@ function noteFail(k, m, r) {
   const t = String(r.text || ''), st = r.status;
   if (st === 401 || /api key not valid|api_key_invalid|user not found|invalid api key|invalid_api_key/i.test(t)) { setCool(k, '*', 300000, 'rejected'); return 'auth'; }
   if (st === 403 && /has not been used|is disabled|service_disabled|not enabled|enable it by visiting/i.test(t)) { setCool(k, '*', 300000, 'api-disabled'); return 'disabled'; }
+  if (/insufficient|no credits|any credits|billing|payment required|out of credit/i.test(t) || st === 402) { setCool(k, '*', 1800000, 'no-credit'); return 'disabled'; }
   if (st === 503 || /high demand|overloaded|temporarily/i.test(t)) { setCool(k, m, 25000, 'busy'); return 'busy'; }
-  if (st === 429 || /resource_exhausted|quota|rate.?limit/i.test(t)) { setCool(k, m, /per ?day|daily/i.test(t) ? 900000 : Math.min(Math.max((r.retry || 0) * 1000, 45000), 180000), 'quota'); return 'quota'; }
+  if (st === 429 || /resource_exhausted|quota|rate.?limit/i.test(t)) { setCool(k, m, /per ?day|daily/i.test(t) ? 900000 : /per month|monthly|calls ?\/ ?month|1000 api calls/i.test(t) ? 3600000 : Math.min(Math.max((r.retry || 0) * 1000, 45000), 180000), 'quota'); return 'quota'; }
   if (st === 404 || /unavailable for free|no endpoints found|not a valid model|model.{0,30}not found|is not found|no longer available|deprecated|only available on|agentic/i.test(t)) { setCool(k, m, 3600000, 'model'); return 'model'; }
   return 'other';
 }
-const hint = (kind, vx) => kind === 'disabled' && vx ? ' → This "AQ." key comes from a Google Cloud project where the Vertex AI API is switched off. Enable it in Google Cloud, or (easier, free) create a Google AI Studio key at aistudio.google.com/apikey (starts with "AIza") and put it in Vercel.' : kind === 'auth' ? ' → The provider rejected this key. Create a new one and replace it in Vercel.' : kind === 'busy' ? ' → Google says this model is busy; trying another.' : kind === 'quota' ? ' → Free quota is used up for now; the next key or model is tried automatically.' : '';
+const hint = (kind, vx) => kind === 'disabled' && !vx ? ' → This account has no credits or the API is not enabled for it. Check billing, or use another key.' : kind === 'disabled' && vx ? ' → This "AQ." key comes from a Google Cloud project where the Vertex AI API is switched off. Enable it in Google Cloud, or (easier, free) create a Google AI Studio key at aistudio.google.com/apikey (starts with "AIza") and put it in Vercel.' : kind === 'auth' ? ' → The provider rejected this key. Create a new one and replace it in Vercel.' : kind === 'busy' ? ' → Google says this model is busy; trying another.' : kind === 'quota' ? ' → Free quota is used up for now; the next key or model is tried automatically.' : '';
 // An "AQ." key may work on the normal Gemini endpoint even when Vertex is off, so try both; cooldowns are tracked per endpoint
 const variants = key => /^AQ\./.test(key) ? [{ vx: false, ck: key + '#g' }, { vx: true, ck: key + '#v' }] : [{ vx: false, ck: key }];
 const GM = new Map();
@@ -357,16 +365,18 @@ async function streamOpenRouter(payload, key, E, sink, sources) {
 // Streams the answer when possible; otherwise returns the normal JSON result (null = already streamed).
 async function routeStream(payload, E, sink) {
   const k = getKeys(E), errors = [], t0 = Date.now();
-  for (const p of (k.provider === 'openrouter' ? ['openrouter', 'gemini'] : ['gemini', 'openrouter'])) {
+  const cp = Object.keys(COMPAT).filter(id => k.compat[id] && k.compat[id].length);
+  for (const p of (k.provider === 'openrouter' ? ['openrouter', 'gemini'].concat(cp) : ['gemini'].concat(cp, ['openrouter']))) {
     if (Date.now() - t0 > 35000) break;
     let r;
     if (p === 'gemini' && k.gemini.length) r = await streamGemini(payload, k.gemini, E, sink);
     else if (p === 'openrouter' && k.openrouter) { const w = await withWeb(payload, E); r = await streamOpenRouter(w.p, k.openrouter, E, sink, w.sources); }
+    else if (COMPAT[p] && k.compat[p]) { const w = await withWeb(payload, E); r = await streamCompat(p, w.p, k.compat[p], E, sink, w.sources); }
     else continue;
     if (r.done) { sink.send({ done: true, sources: r.sources || [], interrupted: !!r.interrupted, provider: r.provider || '', model: r.model || '', fails: r.fails || 0 }); return null; }
     errors.push(r.error);
   }
-  const fb = await route(payload, E, ['gemini', 'openrouter']);
+  const fb = await route(payload, E, ['gemini', 'openrouter'].concat(Object.keys(COMPAT)));
   if (fb.status !== 200) fb.body.error.details = errors.concat(fb.body.error.details).filter(Boolean).join(' | ');
   return fb;
 }
@@ -390,6 +400,81 @@ function guard(info, E, kind) {
 }
 
 // Tries every configured provider in order; returns first success, otherwise all the errors.
+
+// ---- OpenAI-compatible providers (same pattern as the freellmapi router: one table, live model discovery, rotation, cooldowns) ----
+const COMPAT = {
+  grok:     { label: 'Grok', base: 'https://api.x.ai/v1', names: n => /GROK|XAI/.test(n) && !/GROQ/.test(n), prefer: [/non-reasoning/, /grok-3-mini/, /grok-4.*fast/, /grok-3/, /grok-4/, /grok/], exclude: /image|imagine|video|embed|moderation|vision/, fallback: ['grok-4-fast', 'grok-3-mini', 'grok-3'] },
+  groq:     { label: 'Groq', base: 'https://api.groq.com/openai/v1', names: n => /GROQ/.test(n), prefer: [/llama-3\.3-70b/, /gpt-oss-120b/, /llama-4/, /qwen/, /gpt-oss/], exclude: /whisper|guard|tts|playai|distil|embed|orpheus/, fallback: ['llama-3.3-70b-versatile', 'openai/gpt-oss-20b'] },
+  cerebras: { label: 'Cerebras', base: 'https://api.cerebras.ai/v1', names: n => /CEREBRAS/.test(n), prefer: [/gpt-oss/, /qwen-3-235/, /llama-3\.3/, /llama/], exclude: /embed/, fallback: ['gpt-oss-120b', 'llama-3.3-70b'] },
+  mistral:  { label: 'Mistral', base: 'https://api.mistral.ai/v1', names: n => /MISTRAL/.test(n), prefer: [/mistral-small-latest/, /mistral-medium-latest/, /mistral-large-latest/, /ministral/], exclude: /embed|moderation|ocr|voxtral|pixtral|codestral|devstral/, fallback: ['mistral-small-latest', 'mistral-large-latest'] }
+};
+const CMD = new Map();
+async function compatModels(id, key) {
+  const def = COMPAT[id], c = CMD.get(id + ck(key)); if (c && Date.now() - c.t < 1800000) return c.list;
+  const r = await postJSON(def.base + '/models', { authorization: 'Bearer ' + key }, null, 7000, 'GET'), arr = r.ok && r.data && Array.isArray(r.data.data) ? r.data.data : [];
+  const ids = arr.map(m => m && m.id).filter(x => typeof x === 'string' && !def.exclude.test(x)), score = x => { const i = def.prefer.findIndex(re => re.test(x)); return i < 0 ? 99 : i; };
+  const good = ids.filter(x => score(x) < 99).sort((a, b) => score(a) - score(b) || b.localeCompare(a));
+  const list = (good.length ? good : ids.length ? ids : def.fallback).slice(0, 4);
+  CMD.set(id + ck(key), { t: ids.length ? Date.now() : Date.now() - 1500000, list }); return list;
+}
+async function callCompat(id, payload, keys, E) {
+  const def = COMPAT[id], errs = []; if (hasImages(payload)) return { status: 422, error: def.label + ' skipped (images need Gemini).' };
+  for (const key of keys) {
+    const kc = coolInfo(key, '*'); if (kc) { errs.push(def.label + ' key paused briefly (' + kc.why + ')'); continue; }
+    for (const model of await compatModels(id, key)) {
+      if (coolInfo(key, model)) continue;
+      const r = await postJSON(def.base + '/chat/completions', { authorization: 'Bearer ' + key }, { model, messages: toORMessages(payload), max_tokens: clampMaxTokens(payload.max_tokens) }, 30000);
+      const a = r.data && r.data.choices && r.data.choices[0] && r.data.choices[0].message && r.data.choices[0].message.content;
+      if (r.ok && typeof a === 'string' && a.trim()) return { status: 200, body: { content: [{ type: 'text', text: a.trim() }], provider: id, model, fails: errs.length } };
+      const kind = r.ok ? 'other' : noteFail(key, model, r); errs.push(def.label + ' (' + model + '): ' + (r.ok ? 'empty response' : errMsg(r.data, 'HTTP ' + r.status).slice(0, 200)) + hint(kind));
+      if (kind === 'auth' || kind === 'disabled') break;
+    }
+  }
+  return { status: 502, error: errs.join(' | ') || def.label + ': no usable key' };
+}
+async function streamCompat(id, payload, keys, E, sink, sources) {
+  const def = COMPAT[id], errs = []; if (hasImages(payload)) return { error: def.label + ' skipped (images need Gemini).' };
+  for (const key of keys) {
+    const kc = coolInfo(key, '*'); if (kc) { errs.push(def.label + ' key paused briefly (' + kc.why + ')'); continue; }
+    for (const model of await compatModels(id, key)) {
+      if (coolInfo(key, model)) continue;
+      const o = await openStream(def.base + '/chat/completions', { authorization: 'Bearer ' + key }, { model, stream: true, messages: toORMessages(payload), max_tokens: clampMaxTokens(payload.max_tokens) }, 20000);
+      if (!o.ok) { const kind = noteFail(key, model, o); errs.push(def.label + ' (' + model + '): ' + errMsg(o.data, 'HTTP ' + o.status).slice(0, 200) + hint(kind)); if (kind === 'auth' || kind === 'disabled') break; continue; }
+      let any = false;
+      try { await readSSE(o.resp, d => { const t = d.choices && d.choices[0] && d.choices[0].delta && d.choices[0].delta.content; if (typeof t === 'string' && t) { any = true; sink.send({ t }); } }); }
+      catch (e) { if (any) return { done: true, interrupted: true, sources, provider: id, model }; errs.push(def.label + ' (' + model + '): stream failed'); continue; }
+      if (any) return { done: true, sources, provider: id, model, fails: errs.length }; errs.push(def.label + ' (' + model + '): empty response');
+    }
+  }
+  return { error: errs.join(' | ') || def.label + ': no usable key' };
+}
+// ---- Cohere (own API format) ----
+const COHERE = 'https://api.cohere.com/v2/';
+const CHM = new Map();
+async function cohereModels(key) {
+  const c = CHM.get(ck(key)); if (c && Date.now() - c.t < 1800000) return c.list;
+  const r = await postJSON(COHERE + 'models?endpoint=chat&page_size=100', { authorization: 'Bearer ' + key }, null, 7000, 'GET'), arr = r.ok && r.data && Array.isArray(r.data.models) ? r.data.models : [];
+  const pref = [/^command-a-\d/, /command-r-plus/, /command-r-\d/, /command-r7b/], ids = arr.map(m => m && m.name).filter(x => typeof x === 'string' && /^command/.test(x) && !/vision|translate|reasoning|audio|embed|rerank|nightly/.test(x));
+  const sc = x => { const i = pref.findIndex(re => re.test(x)); return i < 0 ? 99 : i; }; ids.sort((a, b) => sc(a) - sc(b) || b.localeCompare(a));
+  const list = (ids.length ? ids : ['command-a-03-2025', 'command-r-plus-08-2024', 'command-r-08-2024']).slice(0, 3);
+  CHM.set(ck(key), { t: ids.length ? Date.now() : Date.now() - 1500000, list }); return list;
+}
+async function callCohere(payload, keys, E) {
+  const errs = []; if (hasImages(payload)) return { status: 422, error: 'Cohere skipped (images need Gemini).' };
+  const msgs = toORMessages(payload).map(m => ({ role: m.role, content: Array.isArray(m.content) ? m.content.map(p => p.text || '').join('\n') : m.content }));
+  for (const key of keys) {
+    const kc = coolInfo(key, '*'); if (kc) { errs.push('Cohere key paused briefly (' + kc.why + ')'); continue; }
+    for (const model of await cohereModels(key)) {
+      if (coolInfo(key, model)) continue;
+      const r = await postJSON(COHERE + 'chat', { authorization: 'Bearer ' + key }, { model, messages: msgs, max_tokens: clampMaxTokens(payload.max_tokens) }, 30000);
+      const parts = r.data && r.data.message && Array.isArray(r.data.message.content) ? r.data.message.content : [], a = parts.filter(p => p && p.type === 'text').map(p => p.text).join('\n').trim();
+      if (r.ok && a) return { status: 200, body: { content: [{ type: 'text', text: a }], provider: 'cohere', model, fails: errs.length } };
+      const kind = r.ok ? 'other' : noteFail(key, model, r); errs.push('Cohere (' + model + '): ' + (r.ok ? 'empty response' : errMsg(r.data, 'HTTP ' + r.status).slice(0, 200)) + hint(kind));
+      if (kind === 'auth' || kind === 'disabled') break;
+    }
+  }
+  return { status: 502, error: errs.join(' | ') || 'Cohere: no usable key' };
+}
 async function route(payload, E, skip) {
   skip = skip || [];
   const k = getKeys(E), tries = [], add = (n, fn) => { if (!skip.includes(n)) tries.push({ name: n, fn }); };
@@ -397,7 +482,9 @@ async function route(payload, E, skip) {
   const A = () => k.anthropic && add('anthropic', viaWeb(p => callAnthropic(p, k.anthropic, E)));
   const G = () => k.gemini.length && add('gemini', () => callGemini(payload, k.gemini, E));
   const O = () => k.openrouter && add('openrouter', viaWeb(p => callOpenRouter(p, k.openrouter, E)));
-  const order = { gemini: [G, A, O], openrouter: [O, G, A] }[k.provider] || [A, G, O];
+  const X = () => Object.keys(COMPAT).forEach(id => k.compat[id] && k.compat[id].length && add(id, viaWeb(p => callCompat(id, p, k.compat[id], E))));
+  const C = () => k.cohere.length && add('cohere', viaWeb(p => callCohere(p, k.cohere, E)));
+  const order = { gemini: [G, X, C, O, A], openrouter: [O, G, X, C, A] }[k.provider] || [A, G, X, C, O];
   order.forEach(f => f());
   add('free', viaWeb(p => callPollinations(p)));
   const errors = [], t0 = Date.now();
@@ -406,11 +493,11 @@ async function route(payload, E, skip) {
     try { const r = await t.fn(); if (r && r.status === 200) return r; if (r) errors.push(r.error); } catch (e) { errors.push(t.name + ': could not reach the service'); }
   }
   const real = errors.filter(Boolean), allKeyIssue = real.some(e => /Vertex AI API|aistudio\.google\.com|rejected/i.test(String(e)));
-  if (!k.anthropic && !k.gemini.length && !k.openrouter) real.unshift('No AI key reached the server. Add GEMINI_API_KEY, ANTHROPIC_API_KEY or an OpenRouter key in Vercel > Settings > Environment Variables (tick Production), then Redeploy. GitHub secrets do not count. Open /api/ai on your site to check.');
-  const summary = !k.anthropic && !k.gemini.length && !k.openrouter ? real[0] : allKeyIssue ? 'The AI could not answer: your AI keys are not working. Open /api/ai?test=1 for the exact fix (tap Technical details below to see it).' : 'The AI is busy or unreachable right now. Please tap Retry in a few seconds.';
+  if (!k.anthropic && !k.gemini.length && !k.openrouter && !k.cohere.length && !Object.keys(k.compat).length) real.unshift('No AI key reached the server. Add GEMINI_API_KEY, ANTHROPIC_API_KEY or an OpenRouter key in Vercel > Settings > Environment Variables (tick Production), then Redeploy. GitHub secrets do not count. Open /api/ai on your site to check.');
+  const summary = !k.anthropic && !k.gemini.length && !k.openrouter && !k.cohere.length && !Object.keys(k.compat).length ? real[0] : allKeyIssue ? 'The AI could not answer: your AI keys are not working. Open /api/ai?test=1 for the exact fix (tap Technical details below to see it).' : 'The AI is busy or unreachable right now. Please tap Retry in a few seconds.';
   return { status: 502, body: { error: { message: summary, details: real.join(' | ') || 'AI request failed.' } } };
 }
-function diag(E) { const k = getKeys(E); return { anthropic_key_found: !!k.anthropic, gemini_keys_found: k.gemini.length, openrouter_key_found: !!k.openrouter, provider_override: k.provider || null }; }
+function diag(E) { const k = getKeys(E), o = { anthropic_key_found: !!k.anthropic, gemini_keys_found: k.gemini.length, openrouter_key_found: !!k.openrouter, cohere_keys_found: k.cohere.length, provider_override: k.provider || null }; Object.keys(COMPAT).forEach(id => { o[id + '_keys_found'] = (k.compat[id] || []).length; }); return o; }
 async function selfTest(E) {
   COOL.clear(); ORM = { t: 0, list: [] };
   const k = getKeys(E), probe = { messages: [{ role: 'user', content: 'Reply with the single word OK.' }], max_tokens: 256, web: false }, out = {}, advice = [];
@@ -418,10 +505,12 @@ async function selfTest(E) {
   for (let i = 0; i < k.gemini.length; i++) { COOL.clear(); await run('gemini_key_' + (i + 1) + ' (' + k.gemini[i].slice(0, 4) + '…)', () => callGemini(probe, [k.gemini[i]], E)); }
   GM.clear(); if (k.gemini[0]) out.gemini_models_now = await geminiModels(E, k.gemini[0]);
   if (k.openrouter) { COOL.clear(); await run('openrouter', () => callOpenRouter(probe, k.openrouter, E)); out.openrouter_free_models_now = (await openRouterModels({}, probe)).slice(0, 4); }
+  for (const id of Object.keys(COMPAT)) for (let i = 0; i < (k.compat[id] || []).length; i++) { COOL.clear(); await run(id + '_key_' + (i + 1), () => callCompat(id, probe, [k.compat[id][i]], E)); }
+  for (let i = 0; i < k.cohere.length; i++) { COOL.clear(); await run('cohere_key_' + (i + 1), () => callCohere(probe, [k.cohere[i]], E)); }
   if (k.anthropic) await run('anthropic', () => callAnthropic(probe, k.anthropic, E));
   await run('free_fallback_pollinations', () => callPollinations(probe));
   const w = await wikiContext('Photosynthesis'); out.web_search = w ? 'WORKS (' + w.label + ')' : 'FAILED: Wikipedia not reachable'; out.tavily_key_found = !!envKey(E, ['TAVILY_API_KEY'], n => n.includes('TAVILY'));
-  const ok = Object.keys(out).filter(x => /^(gemini|openrouter$|anthropic)/.test(x) && out[x] === 'WORKS');
+  const ok = Object.keys(out).filter(x => /^(gemini_key|openrouter$|anthropic|grok|groq|cerebras|mistral|cohere)/.test(x) && out[x] === 'WORKS');
   if (!ok.length) advice.push('No paid/keyed AI provider is working. Fastest fix: create a free Google AI Studio key at https://aistudio.google.com/apikey (starts with AIza), add it in Vercel > Settings > Environment Variables as GEMINI_API_KEY (Production), then Redeploy.');
   if (!ok.length && Object.values(out).some(v => /Vertex/i.test(String(v)) && /FAILED/.test(String(v)))) advice.push('If your "AQ." keys keep failing on every Gemini model, create a free Google AI Studio key (AIza...) instead.');
   if (!out.tavily_key_found) advice.push('Optional: a free Tavily key (tavily.com) as TAVILY_API_KEY gives non-Gemini models real web search; without it they use Wikipedia.');

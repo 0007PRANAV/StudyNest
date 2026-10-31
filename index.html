@@ -254,6 +254,12 @@
   .ai-result-box { background: var(--surface); border-radius: 14px; padding: 14px; margin-top: 10px; border-left: 3px solid var(--accent2); font-size: 0.85rem; line-height: 1.65; white-space: pre-wrap; }
   .ai-result-label { font-weight: 700; font-size: 0.8rem; color: #a78bfa; margin-bottom: 8px; display: flex; align-items: center; gap: 6px; }
   .ai-action-row { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+  :root { --nav-h: 60px; }
+  .ai-composer { position: sticky; bottom: var(--nav-h); z-index: 60; background: var(--bg); padding: 8px 0; }
+  .ai-info-fab { position: absolute; right: 2px; top: -42px; z-index: 61; height: 34px; padding: 0 13px; border-radius: 17px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: .78rem; font-weight: 700; box-shadow: 0 4px 14px rgba(0,0,0,.35); cursor: pointer; }
+  .ai-fab { position: fixed; bottom: calc(var(--nav-h) + 14px); right: max(14px, calc((100vw - 480px) / 2 + 14px)); width: 54px; height: 54px; border-radius: 50%; border: none; background: linear-gradient(135deg, var(--accent2), var(--accent)); color: #fff; font-size: 1.5rem; box-shadow: 0 6px 20px rgba(0,0,0,.45); z-index: 190; cursor: pointer; touch-action: none; user-select: none; -webkit-user-select: none; transition: transform .25s, opacity .25s; display: flex; align-items: center; justify-content: center; }
+  .ai-fab.hide { transform: translateY(100px) scale(.8); opacity: 0; pointer-events: none; }
+  .ai-fab.gone { display: none; }
   .ai-msg-actions { display: flex; gap: 6px; margin-top: 8px; flex-wrap: wrap; }
   .ai-user .ai-msg-actions { justify-content: flex-end; }
   .ai-msg-actions .ai-mini-btn { padding: 5px 10px; font-size: 0.68rem; opacity: .85; }
@@ -435,8 +441,10 @@
 
   <!-- AI TUTOR -->
   <div class="page" id="pageAI">
-    <div class="flex-between"><div class="section-title" style="margin-bottom:0;">🤖 AI Tutor</div><div style="display:flex;gap:6px;"><button class="ai-mini-btn" id="aiUseBtn" onclick="aiUsageModal()">📊 0</button><button class="ai-mini-btn" onclick="aiHistoryModal()">🕘 History</button><button class="ai-mini-btn" onclick="aiNewChat()">➕ New</button></div></div>
-    <div id="aiMessages" style="display:flex;flex-direction:column;gap:10px;margin:14px 0;"></div>
+    <div class="flex-between"><div class="section-title" style="margin-bottom:0;">🤖 AI Tutor</div><div style="display:flex;gap:6px;"><button class="ai-mini-btn" onclick="aiHistoryModal()">🕘 History</button><button class="ai-mini-btn" onclick="aiNewChat()">➕ New</button></div></div>
+    <div id="aiMessages" style="display:flex;flex-direction:column;gap:10px;margin:14px 0 54px;"></div>
+    <div class="ai-composer" id="aiComposer">
+    <button class="ai-info-fab" id="aiUseBtn" onclick="aiUsageModal()" title="Usage and AI details">📊 0</button>
     <div id="aiAttachBar" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;"></div>
     <div class="card" style="margin-bottom:0;">
       <textarea class="inp" id="aiInput" placeholder="Ask anything, or tell me to change your notes, homework, timetable…" rows="2" style="margin-bottom:10px;"></textarea>
@@ -448,6 +456,7 @@
         <button class="ai-tool-btn" id="aiBtnWeb" title="Search the web for answers" onclick="aiToggleWeb()">🌐</button>
         <button class="btn btn-accent" style="flex:1;" onclick="sendAI()">Send ✨</button>
       </div>
+    </div>
     </div>
     <input type="file" id="aiFileInput" multiple accept="image/*,application/pdf,text/*,.txt,.md,.csv,.json" style="display:none;" onchange="aiAddFiles(Array.from(this.files));this.value='';">
   </div>
@@ -501,6 +510,7 @@
   </div>
 
   <!-- BOTTOM NAV -->
+  <button class="ai-fab" id="aiFab" title="Open AI Tutor" onclick="aiFabGo()">🤖</button>
   <div class="bottom-nav">
     <button class="nav-item active" onclick="showPage('pageNotes',this)">
       <span class="nav-icon">📓</span>Notes
@@ -863,8 +873,29 @@ function showPage(id, btn) {
   if (id === 'pageTimetable') renderTimetable();
   if (id === 'pageHomework') renderHomework();
   if (id === 'pageProfile') renderProfile();
-  if (id === 'pageAI') aiOpen();
+  document.getElementById('aiFab').classList.toggle('gone', id === 'pageAI'); aiNavH();
+  if (id === 'pageAI') aiEnter();
 }
+// keeps the chat box and the floating button exactly above the bottom nav, whatever its height
+function aiNavH() { const n = document.querySelector('.bottom-nav'); if (n && n.offsetHeight > 20) document.documentElement.style.setProperty('--nav-h', n.offsetHeight + 'px'); }
+window.addEventListener('resize', () => { aiNavH(); try { aiFabClamp(); } catch (e) {} });
+let aiFabMoved = false;
+function aiFabGo() { if (aiFabMoved) return; showPage('pageAI', document.querySelector('.nav-item[onclick*="pageAI"]')); }
+function aiFabClamp() {
+  const f = document.getElementById('aiFab'); if (!f || f.style.left === '') return;
+  const nav = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--nav-h')) || 60;
+  f.style.left = Math.min(Math.max(0, parseFloat(f.style.left)), window.innerWidth - 54) + 'px'; f.style.top = Math.min(Math.max(64, parseFloat(f.style.top)), window.innerHeight - nav - 62) + 'px';
+}
+(function aiFabInit() {
+  const f = document.getElementById('aiFab'); if (!f) return; let sx = 0, sy = 0, ox = 0, oy = 0, down = false, drag = false;
+  try { const sp = JSON.parse(localStorage.getItem('sn_aifabpos') || 'null'); if (sp) { f.style.right = 'auto'; f.style.bottom = 'auto'; f.style.left = sp.l + 'px'; f.style.top = sp.t + 'px'; } } catch (e) {}
+  f.addEventListener('pointerdown', e => { down = true; drag = false; sx = e.clientX; sy = e.clientY; const r = f.getBoundingClientRect(); ox = r.left; oy = r.top; try { f.setPointerCapture(e.pointerId); } catch (x) {} });
+  f.addEventListener('pointermove', e => { if (!down) return; if (Math.abs(e.clientX - sx) + Math.abs(e.clientY - sy) > 10) drag = true; if (!drag) return; f.style.right = 'auto'; f.style.bottom = 'auto'; f.style.left = (ox + e.clientX - sx) + 'px'; f.style.top = (oy + e.clientY - sy) + 'px'; aiFabClamp(); });
+  f.addEventListener('pointerup', () => { if (!down) return; down = false; if (drag) { aiFabMoved = true; setTimeout(() => { aiFabMoved = false; }, 80); try { localStorage.setItem('sn_aifabpos', JSON.stringify({ l: parseFloat(f.style.left), t: parseFloat(f.style.top) })); } catch (e) {} } });
+  // hides while scrolling down (so it never covers a button you are reaching for), returns when scrolling up or when you stop
+  let lastY = window.scrollY, idle = 0;
+  window.addEventListener('scroll', () => { const y = window.scrollY; if (y > lastY + 8 && y > 80) f.classList.add('hide'); else if (y < lastY - 8) f.classList.remove('hide'); lastY = y; clearTimeout(idle); idle = setTimeout(() => f.classList.remove('hide'), 1200); }, { passive: true });
+})();
 
 // ===== NOTES & QUESTION PAPERS (folder-based, shared engine) =====
 // "kind" is either 'notes' or 'qp' — both reuse the exact same engine.
@@ -2123,14 +2154,27 @@ function aiLoadStore() {
     if (old && (old.log || []).length) { const c = aiNewObj(); c.history = old.history || []; c.log = old.log; c.title = aiTitle(c.log); s.chats.push(c); s.active = c.id; }
   }
   if (!s.chats.find(c => c.id === s.active)) { const c = aiNewObj(); s.chats.unshift(c); s.active = c.id; }
+  const rec = s.chats.slice().sort((a, b) => b.ts - a.ts)[0]; if (rec) s.active = rec.id;   // always reopen on the most recent chat
   return s;
 }
 function aiShowChat() {
   const c = aiCur(); aiHistory = (c.history || []).slice(); aiLog = (c.log || []).slice(); aiPending = [];
   let cx = null; aiLog.forEach(e => { if (e.k === 'user' && !e.x) cx = e.x = uid(); else if (!e.x) e.x = cx || (cx = uid()); else cx = e.x; });
   const m = $id('aiMessages'); m.innerHTML = ''; aiLog.forEach(e => aiDraw(e, false)); aiBar(); aiWelcome();
-  if (m.lastElementChild) setTimeout(() => m.lastElementChild.scrollIntoView({ block: 'end' }), 50);
+  aiScrollEnd();
 }
+// shows the latest message (never the top of the chat) whenever the AI page opens or the site is reopened
+function aiScrollEnd() {
+  const go = () => { const m = $id('aiMessages'); if (!m || !$id('pageAI').classList.contains('active')) return; window.scrollTo(0, document.documentElement.scrollHeight); if (m.lastElementChild) m.lastElementChild.scrollIntoView({ block: 'end' }); };
+  requestAnimationFrame(go); setTimeout(go, 80); setTimeout(go, 350);
+}
+function aiEnter() {
+  aiOpen();
+  if (aiStore && !aiBusy) { const rec = aiStore.chats.slice().sort((a, b) => b.ts - a.ts)[0]; if (rec && rec.id !== aiStore.active) { const c = aiCur(); if (c) { c.history = aiHistory.slice(-24); c.log = aiLog.slice(-60); } aiStore.active = rec.id; aiPersist(); aiShowChat(); } }
+  aiScrollEnd();
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden && $id('pageAI') && $id('pageAI').classList.contains('active')) aiScrollEnd(); });
+window.addEventListener('pageshow', () => { if ($id('pageAI') && $id('pageAI').classList.contains('active')) aiScrollEnd(); });
 function aiOpen() {
   aiWebBtn(); try { aiUseChip(); } catch (e) {}
   if (aiLoadedFor !== currentUser.username) { aiLoadedFor = currentUser.username; aiStore = aiLoadStore(); aiShowChat(); }
@@ -2179,6 +2223,8 @@ const aiUseKey = () => 'aiuse_' + currentUser.username;
 function aiUseGet() { let u = null; try { u = storeGet(aiUseKey()); } catch (e) {} if (!u || u.day !== aiDay()) u = { day: aiDay(), n: 0, err: 0, by: {}, last: null, fall: 0 }; return u; }
 function aiProvLabel(p, m) {
   m = String(m || '').replace(/:free$/, '').split('/').pop();
+  const nm = { grok: 'Grok', cohere: 'Cohere', groq: 'Groq', cerebras: 'Cerebras', mistral: 'Mistral' };
+  if (nm[p]) return nm[p] + (m ? ' (' + m + ')' : '');
   return p === 'gemini' ? 'Gemini' + (m ? ' (' + m.replace(/^gemini-/, '') + ')' : '') : p === 'openrouter' ? 'OpenRouter' + (m ? ' (' + m + ')' : '') : p === 'anthropic' ? 'Claude' : p === 'pollinations' ? 'Free AI' : (p || 'AI');
 }
 function aiUseNote(ok, data) {
@@ -2193,18 +2239,27 @@ function aiUseChip() { const b = $id('aiUseBtn'); if (!b) return; const u = aiUs
 function aiUsageModal() {
   const u = aiUseGet(), pct = Math.min(100, Math.round(u.n / AI_DAILY_LIMIT * 100)), left = Math.max(0, AI_DAILY_LIMIT - u.n);
   const by = Object.keys(u.by).map(p => `<div style="display:flex;justify-content:space-between;"><span>${escapeHtml(aiProvLabel(p))}</span><b>${u.by[p]}</b></div>`).join('') || '<div style="color:var(--muted)">No answers yet today.</div>';
-  openModal(`<div class="modal-title">📊 AI usage today</div>
-    <div style="font-size:.85rem;line-height:1.7;">
-      <div style="display:flex;justify-content:space-between;"><span>Questions asked</span><b>${u.n} / ${AI_DAILY_LIMIT}</b></div>
-      <div style="height:8px;background:var(--border);border-radius:6px;margin:6px 0 12px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${pct >= 90 ? 'var(--danger)' : 'var(--accent)'};"></div></div>
-      <div style="font-weight:600;margin-bottom:4px;">Answered by</div>${by}
-      <div style="display:flex;justify-content:space-between;margin-top:8px;"><span>Used a backup AI</span><b>${u.fall}</b></div>
-      <div style="display:flex;justify-content:space-between;"><span>Errors</span><b>${u.err}</b></div>
-      ${u.last ? `<div style="display:flex;justify-content:space-between;"><span>Last answer</span><b>${escapeHtml(aiProvLabel(u.last.provider, u.last.model))}</b></div>` : ''}
-      <div style="font-size:.74rem;color:var(--muted);margin-top:12px;">${left} questions left under the app limit (resets daily). The AI providers also have their own free limits that this app cannot see. If answers come from a backup AI, a provider's free quota is probably used up for now. It recovers on its own, and the count here is for this device only.</div>
+  const row = (a, b) => `<div style="display:flex;justify-content:space-between;gap:10px;"><span>${a}</span><b style="text-align:right;">${b}</b></div>`;
+  const cur = aiStore && aiCur ? aiCur() : null, prof = currentUser ? eduForAI(currentUser) : '';
+  const wm = { auto: 'Auto (searches when needed)', on: 'Always on', off: 'Off' }[aiWebMode];
+  openModal(`<div class="modal-title">📊 AI details</div>
+    <div style="font-size:.84rem;line-height:1.7;max-height:66vh;overflow:auto;">
+      ${row('Questions today', u.n + ' / ' + AI_DAILY_LIMIT)}
+      <div style="height:8px;background:var(--border);border-radius:6px;margin:4px 0 10px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:${pct >= 90 ? 'var(--danger)' : 'var(--accent)'};"></div></div>
+      <div style="font-weight:600;margin-bottom:2px;">Answered by</div>${by}
+      ${row('Backup AI used', u.fall)}${row('Errors', u.err)}${u.last ? row('Last answer', escapeHtml(aiProvLabel(u.last.provider, u.last.model))) : ''}
+      <div style="font-weight:600;margin:12px 0 2px;">This chat</div>
+      ${row('Chat', escapeHtml(cur ? aiClip(cur.title, 28) : 'New chat'))}${row('Messages', aiLog.filter(e => e.k === 'user').length)}${row('Web search', wm)}
+      <div style="font-weight:600;margin:12px 0 2px;">Your study profile</div>
+      <div style="color:${prof ? 'var(--text)' : 'var(--muted)'};font-size:.8rem;">${prof ? escapeHtml(prof) : 'Not set yet. Add your class, board and exam in Profile so answers fit you.'}</div>
+      <div style="font-weight:600;margin:12px 0 2px;">AI connection</div>
+      <div id="aiConn" style="color:var(--muted);font-size:.8rem;">Checking…</div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:10px;">${left} questions left under the app limit (resets daily). Providers also have their own free limits that this app cannot see: if answers come from a backup AI, a free quota is probably used up for now and recovers by itself. Counts are for this device only.</div>
     </div>
-    <button class="btn btn-accent" style="width:100%;margin-top:12px;" onclick="closeModalDirect()">Close</button>`);
+    <div style="display:flex;gap:8px;margin-top:12px;"><button class="btn btn-ghost" style="flex:1;" onclick="aiOpenTest()">🔧 Full AI test</button><button class="btn btn-accent" style="flex:1;" onclick="closeModalDirect()">Close</button></div>`);
+  fetch('/api/ai').then(r => r.json()).then(d => { const el = $id('aiConn'); if (!el) return; const n = d.gemini_keys_found || 0; el.innerHTML = row('Gemini keys', n || 'none') + (d.grok_keys_found ? row('Grok keys', d.grok_keys_found) : '') + (d.cohere_keys_found ? row('Cohere keys', d.cohere_keys_found) : '') + row('OpenRouter', d.openrouter_key_found ? 'connected' : 'not set') + row('Free backup AI', 'always on'); el.style.color = 'var(--text)'; }).catch(() => { const el = $id('aiConn'); if (el) el.textContent = 'Could not check right now.'; });
 }
+function aiOpenTest() { window.open('/api/ai?test=1', '_blank', 'noopener'); }
 let aiRaf = 0, aiCurX = null;
 function aiActs(e) {
   const b = (a, l, t) => `<button class="ai-mini-btn" title="${t}" onclick="aiMsgAct('${a}',this)">${l}</button>`;

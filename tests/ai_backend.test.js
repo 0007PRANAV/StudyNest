@@ -11,7 +11,7 @@ global.fetch = async (url, opt) => {
 };
 const handler = require('../api/ai.js');
 const mkRes = () => { const r = { code: 200, out: [], headers: {}, setHeader(k, v) { this.headers[k] = v; }, status(c) { this.code = c; return this; }, json(o) { this.body = o; return this; }, end() { this.ended = true; return this; }, writeHead(c) { this.code = c; }, write(x) { this.out.push(x); } }; return r; };
-const post = async (env, payload, ip) => { Object.keys(process.env).filter(k => /GEMINI|OPENROUTER|ANTHROPIC|TAVILY|AI_/.test(k)).forEach(k => delete process.env[k]); Object.assign(process.env, env);
+const post = async (env, payload, ip) => { Object.keys(process.env).filter(k => /GEMINI|OPENROUTER|ANTHROPIC|TAVILY|AI_|GROK|COHERE|GROQ|MISTRAL|CEREBRAS/.test(k)).forEach(k => delete process.env[k]); Object.assign(process.env, env);
   const res = mkRes(); await handler({ method: 'POST', headers: { origin: 'https://s.test', host: 's.test', 'x-forwarded-for': ip || '1.1.1.' + Math.floor(Math.random() * 250) }, body: payload, url: '/api/ai' }, res); return res; };
 const gem = txt => ({ status: 200, body: { candidates: [{ content: { parts: [{ text: txt }] } }] } });
 const msg = t => [{ role: 'user', content: t }];
@@ -70,6 +70,29 @@ const msg = t => [{ role: 'user', content: t }];
   // J) temporary 503 "high demand" is retried once on the same model
   calls = []; let k503 = 0; script = (u) => /v1beta\/models\?pageSize/.test(u) ? { status: 500, body: {} } : /generativelanguage/.test(u) ? (k503++ === 0 ? { status: 503, body: { error: { message: 'high demand' } } } : gem('after-retry')) : null;
   r = await post({ GEMINI_API_KEY: 'AIzaHHHHHHHHHHHHHHHHHHHHHHHH' }, { messages: msg('hi again') }); assert.ok(JSON.stringify(r.body).includes('after-retry')); console.log('J ok: 503 retried');
+  // K) Grok (xAI): 2 keys from different accounts; model discovery skips image models; provider reported
+  const GK1 = 'sk-GROKKEYONE1111111111111111', GK2 = 'sk-GROKKEYTWO2222222222222222', CK = 'cohere_COHEREKEY333333333333';
+  calls = []; script = (u, b, o) => /api\.x\.ai\/v1\/models/.test(u) ? { status: 200, body: { data: [{ id: 'grok-2-image' }, { id: 'grok-3-mini' }, { id: 'grok-4-fast-reasoning' }] } }
+    : /api\.x\.ai\/v1\/chat/.test(u) ? { status: 200, body: { choices: [{ message: { content: 'from-grok' } }] } } : /wikipedia/.test(u) ? { status: 200, body: { query: { pages: [] } } } : null;
+  r = await post({ GROK_API_KEY_1: GK1, GROK_API_KEY_2: GK2 }, { messages: msg('explain cells') });
+  assert.ok(JSON.stringify(r.body).includes('from-grok') && r.body.provider === 'grok', JSON.stringify(r.body)); const gm = calls.find(c => /x\.ai\/v1\/chat/.test(c.url)).body.model; assert.ok(!/image/.test(gm), gm); console.log('K ok: Grok used, model', gm);
+  // L) first Grok key rejected (401) -> second key answers; rejected key is then skipped
+  calls = []; script = (u, b, o) => /x\.ai\/v1\/models/.test(u) ? { status: 200, body: { data: [{ id: 'grok-3-mini' }] } } : /x\.ai\/v1\/chat/.test(u) ? ((o.headers.authorization || '').includes('KEYONE') ? { status: 401, body: { error: { message: 'Incorrect API key provided' } } } : { status: 200, body: { choices: [{ message: { content: 'key2-answer' } }] } }) : null;
+  r = await post({ GROK_API_KEY_1: GK1, GROK_API_KEY_2: GK2 }, { messages: msg('explain atoms again') }); assert.ok(JSON.stringify(r.body).includes('key2-answer'));
+  const before1 = calls.filter(c => /x\.ai\/v1\/chat/.test(c.url) && (c.headers.authorization || '').includes('KEYONE')).length; await post({ GROK_API_KEY_1: GK1, GROK_API_KEY_2: GK2 }, { messages: msg('and once more please') });
+  assert.strictEqual(calls.filter(c => /x\.ai\/v1\/chat/.test(c.url) && (c.headers.authorization || '').includes('KEYONE')).length, before1, 'rejected key paused'); console.log('L ok: bad key skipped, good key used');
+  // M) Grok out of credits -> Cohere answers (v2 chat format)
+  calls = []; script = (u, b) => /x\.ai\/v1\/models/.test(u) ? { status: 200, body: { data: [{ id: 'grok-3-mini' }] } } : /x\.ai\/v1\/chat/.test(u) ? { status: 403, body: { error: { message: 'Your newly created team doesn\'t have any credits yet' } } }
+    : /cohere\.com\/v2\/models/.test(u) ? { status: 200, body: { models: [{ name: 'command-a-vision-07-2025' }, { name: 'command-r-08-2024' }, { name: 'command-a-03-2025' }] } }
+    : /cohere\.com\/v2\/chat/.test(u) ? { status: 200, body: { message: { role: 'assistant', content: [{ type: 'text', text: 'from-cohere' }] } } } : null;
+  r = await post({ GROK_API_KEY_1: GK1, COHERE_API_KEY_1: CK }, { messages: msg('explain energy'), system: 'SYS' });
+  const cc = calls.find(c => /cohere\.com\/v2\/chat/.test(c.url)); assert.ok(JSON.stringify(r.body).includes('from-cohere') && r.body.provider === 'cohere'); assert.strictEqual(cc.body.model, 'command-a-03-2025'); assert.strictEqual(cc.body.messages[0].role, 'system'); assert.strictEqual(typeof cc.body.messages[1].content, 'string'); console.log('M ok: out-of-credit Grok -> Cohere', cc.body.model);
+  // N) streaming through Grok (OpenAI SSE)
+  calls = []; script = (u) => /x\.ai\/v1\/models/.test(u) ? { status: 200, body: { data: [{ id: 'grok-3-mini' }] } } : /x\.ai\/v1\/chat/.test(u) ? { status: 200, sse: 'data: ' + JSON.stringify({ choices: [{ delta: { content: 'Gro' } }] }) + '\n\ndata: ' + JSON.stringify({ choices: [{ delta: { content: 'k!' } }] }) + '\n\ndata: [DONE]\n\n' } : null;
+  r = await post({ GROK_API_KEY_1: 'sk-GROKKEYFOUR4444444444444444' }, { messages: msg('stream please'), stream: true }); const so = r.out.join(''); assert.ok(so.includes('"t":"Gro"') && so.includes('"provider":"grok"')); console.log('N ok: Grok streaming');
+  // O) Grok "sk-" keys are not mistaken for OpenRouter/Anthropic; diag counts them
+  Object.keys(process.env).filter(k => /GROK|COHERE/.test(k)).forEach(k => delete process.env[k]); Object.assign(process.env, { GROK_API_KEY_1: GK1, GROK_API_KEY_2: GK2, COHERE_API_KEY_1: CK });
+  const dres = mkRes(); await handler({ method: 'GET', headers: { host: 's.test', 'x-forwarded-for': '8.8.8.8' }, url: '/api/ai' }, dres); const dg = dres.body; assert.strictEqual(dg.grok_keys_found, 2); assert.strictEqual(dg.cohere_keys_found, 1); assert.strictEqual(dg.openrouter_key_found, false); assert.strictEqual(dg.anthropic_key_found, false); console.log('O ok: diag counts Grok/Cohere');
   // G) failures are temporary: after a 401 the key is paused ~5 min (not 10), 429 only ~1 min; self test reports advice
   calls = []; script = (u) => /generativelanguage/.test(u) ? { status: 400, body: { error: { message: 'API key not valid.' } } } : null;
   Object.assign(process.env, { GEMINI_API_KEY: 'AIzaFFFFFFFFFFFFFFFFFFFFFFFF' });
