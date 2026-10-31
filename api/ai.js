@@ -57,11 +57,12 @@ function noteFail(k, m, r) {
   const t = String(r.text || ''), st = r.status;
   if (st === 401 || /api key not valid|api_key_invalid|user not found|invalid api key|invalid_api_key/i.test(t)) { setCool(k, '*', 300000, 'rejected'); return 'auth'; }
   if (st === 403 && /has not been used|is disabled|service_disabled|not enabled|enable it by visiting/i.test(t)) { setCool(k, '*', 300000, 'api-disabled'); return 'disabled'; }
+  if (st === 503 || /high demand|overloaded|temporarily/i.test(t)) { setCool(k, m, 25000, 'busy'); return 'busy'; }
   if (st === 429 || /resource_exhausted|quota|rate.?limit/i.test(t)) { setCool(k, m, /per ?day|daily/i.test(t) ? 900000 : Math.min(Math.max((r.retry || 0) * 1000, 45000), 180000), 'quota'); return 'quota'; }
   if (st === 404 || /unavailable for free|no endpoints found|not a valid model|model.{0,30}not found|is not found|no longer available|deprecated|only available on|agentic/i.test(t)) { setCool(k, m, 3600000, 'model'); return 'model'; }
   return 'other';
 }
-const hint = (kind, vx) => kind === 'disabled' && vx ? ' → This "AQ." key comes from a Google Cloud project where the Vertex AI API is switched off. Enable it in Google Cloud, or (easier, free) create a Google AI Studio key at aistudio.google.com/apikey (starts with "AIza") and put it in Vercel.' : kind === 'auth' ? ' → The provider rejected this key. Create a new one and replace it in Vercel.' : kind === 'quota' ? ' → Free quota is used up for now; the next key or model is tried automatically.' : '';
+const hint = (kind, vx) => kind === 'disabled' && vx ? ' → This "AQ." key comes from a Google Cloud project where the Vertex AI API is switched off. Enable it in Google Cloud, or (easier, free) create a Google AI Studio key at aistudio.google.com/apikey (starts with "AIza") and put it in Vercel.' : kind === 'auth' ? ' → The provider rejected this key. Create a new one and replace it in Vercel.' : kind === 'busy' ? ' → Google says this model is busy; trying another.' : kind === 'quota' ? ' → Free quota is used up for now; the next key or model is tried automatically.' : '';
 // An "AQ." key may work on the normal Gemini endpoint even when Vertex is off, so try both; cooldowns are tracked per endpoint
 const variants = key => /^AQ\./.test(key) ? [{ vx: false, ck: key + '#g' }, { vx: true, ck: key + '#v' }] : [{ vx: false, ck: key }];
 const GM = new Map();
@@ -118,7 +119,7 @@ function toGeminiContents(messages, camel) {
   return contents;
 }
 function geminiBody(payload, vx, tools, model, think) {
-  const b = { contents: toGeminiContents(payload.messages, vx), generationConfig: { maxOutputTokens: clampMaxTokens(payload.max_tokens) } };
+  const b = { contents: toGeminiContents(payload.messages, vx), generationConfig: { maxOutputTokens: Math.max(clampMaxTokens(payload.max_tokens), think !== false && /gemini-[23]/.test(model || '') ? 600 : 1) } };
   if (think !== false && !/pro|latest/.test(model || '')) {   // light thinking = much faster first words, still accurate for study questions (retried without it if a model rejects it)
     if (/gemini-2\.5/.test(model || '')) b.generationConfig.thinkingConfig = { thinkingBudget: /lite/.test(model) ? 0 : 512 };
     else if (/gemini-3/.test(model || '')) b.generationConfig.thinkingConfig = { thinkingLevel: 'low' };
@@ -149,7 +150,7 @@ async function geminiSend(send, payload, vx, model, key) {
   return r;
 }
 async function callGemini(payload, keys, E) {
-  const errs = [];
+  const errs = []; let budget = 6;   // at most 6 model attempts per request so a busy Google never delays the fallback
   for (const key of orderKeys(keys)) {
     const models = await geminiModels(E, key);
     for (const v of variants(key)) {
@@ -158,6 +159,7 @@ async function callGemini(payload, keys, E) {
       for (const model of models) {
         const tag = 'Gemini key ' + n + ' [' + (vx ? 'Vertex' : 'AI Studio') + ', ' + model + ']', mc = coolInfo(v.ck, model);
         if (mc) { errs.push(tag + ' paused briefly (' + mc.why + ')'); continue; }
+        if (budget-- <= 0) { errs.push('stopped after 6 attempts'); return { status: 502, error: errs.join(' | ') }; }
         const url = (vx ? VERTEX_URL : GEMINI_URL) + encodeURIComponent(model) + ':generateContent';
         const r = await geminiSend(b => postJSON(url, { 'x-goog-api-key': key }, b, 30000), payload, vx, model, key);
         if (!r.ok) {
@@ -307,7 +309,7 @@ async function openStream(url, headers, body, ms) {
   } catch (e) { clearTimeout(t); return { ok: false, status: 599, data: { error: { message: e && e.name === 'AbortError' ? 'timed out' : 'network error' } }, text: '' }; }
 }
 async function streamGemini(payload, keys, E, sink) {
-  const errs = [];
+  const errs = []; let budget = 6;
   for (const key of orderKeys(keys)) {
     const models = await geminiModels(E, key);
     for (const v of variants(key)) {
@@ -316,6 +318,7 @@ async function streamGemini(payload, keys, E, sink) {
       for (const model of models) {
         const tag = 'Gemini key ' + n + ' [' + (vx ? 'Vertex' : 'AI Studio') + ', ' + model + ']', mc = coolInfo(v.ck, model);
         if (mc) { errs.push(tag + ' paused briefly (' + mc.why + ')'); continue; }
+        if (budget-- <= 0) { errs.push('stopped after 6 attempts'); return { error: errs.join(' | ') }; }
         const url = (vx ? VERTEX_URL : GEMINI_URL) + encodeURIComponent(model) + ':streamGenerateContent?alt=sse';
         const o = await geminiSend(b => openStream(url, { 'x-goog-api-key': key }, b, 20000), payload, vx, model, key);
         if (!o.ok) {
@@ -410,7 +413,7 @@ async function route(payload, E, skip) {
 function diag(E) { const k = getKeys(E); return { anthropic_key_found: !!k.anthropic, gemini_keys_found: k.gemini.length, openrouter_key_found: !!k.openrouter, provider_override: k.provider || null }; }
 async function selfTest(E) {
   COOL.clear(); ORM = { t: 0, list: [] };
-  const k = getKeys(E), probe = { messages: [{ role: 'user', content: 'Reply with the single word OK.' }], max_tokens: 8, web: false }, out = {}, advice = [];
+  const k = getKeys(E), probe = { messages: [{ role: 'user', content: 'Reply with the single word OK.' }], max_tokens: 256, web: false }, out = {}, advice = [];
   const run = async (name, fn) => { try { const r = await fn(); out[name] = r && r.status === 200 ? 'WORKS' : 'FAILED: ' + (r && r.error); } catch (e) { out[name] = 'FAILED: could not reach the service'; } };
   for (let i = 0; i < k.gemini.length; i++) { COOL.clear(); await run('gemini_key_' + (i + 1) + ' (' + k.gemini[i].slice(0, 4) + '…)', () => callGemini(probe, [k.gemini[i]], E)); }
   GM.clear(); if (k.gemini[0]) out.gemini_models_now = await geminiModels(E, k.gemini[0]);
