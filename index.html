@@ -465,10 +465,20 @@
       <div class="profile-field" id="pfName"></div>
       <div class="profile-field" id="pfAge"></div>
       <div class="profile-field" id="pfUsername"></div>
+      <div class="profile-field" id="pfStudies" style="display:none;"></div>
     </div>
     <div class="card mt-12" id="editProfileCard">
       <div style="font-weight:600;margin-bottom:12px;">Edit Profile</div>
       <input class="inp" id="editAge" placeholder="Update age" type="number" style="margin-bottom:10px;">
+      <div style="font-weight:600;margin:6px 0 4px;">🎓 Your studies</div>
+      <div style="font-size:0.75rem;color:var(--muted);margin-bottom:8px;">Helps the AI tutor match your class, board and exam. Optional.</div>
+      <select class="inp" id="editCls" onchange="eduToggle()" style="margin-bottom:10px;"></select>
+      <select class="inp" id="editBoard" onchange="eduToggle()" style="margin-bottom:10px;"></select>
+      <select class="inp" id="editState" style="margin-bottom:10px;display:none;"></select>
+      <select class="inp" id="editStream" style="margin-bottom:10px;display:none;"></select>
+      <select class="inp" id="editMedium" style="margin-bottom:10px;"></select>
+      <select class="inp" id="editExam" style="margin-bottom:10px;"></select>
+      <input class="inp" id="editSchool" placeholder="School (optional, never sent to the AI)" maxlength="80" style="margin-bottom:10px;">
       <button class="btn btn-primary w-full" onclick="saveProfile()">Save Changes</button>
     </div>
     <div class="card mt-12" id="adminPanel" style="display:none;">
@@ -2259,7 +2269,8 @@ You can CHANGE the app. When (and only when) the user asks for a change, finish 
 {"type":"generate_image","prompt":"detailed English image prompt"}
 {"type":"make_video","title":"..","scenes":[{"text":"caption (max 140 chars)","image_prompt":"detailed English image prompt"}]}  (4-6 scenes)
 Use ids/idx exactly as in APP DATA. You can't delete notes/files/folders; tell the user to do that with the 🗑️ buttons. For text notes, summaries and study material the user wants kept, use save_note.
-=== APP DATA ===
+${eduForAI(currentUser) ? `STUDENT PROFILE: ${eduForAI(currentUser)}. Pitch explanations at this level and use this board's terms and exam style. If unsure what this board/class syllabus covers, say so instead of claiming it. Reply in the student's medium when it is a language they use; keep technical terms in English.
+` : ''}=== APP DATA ===
 ${aiSnapshot(q)}`;
 }
 
@@ -2596,6 +2607,51 @@ function deleteAnn(idx) {
 }
 
 // ===== PROFILE =====
+// ---- Study profile (class, board, stream, medium, target exam) ----
+const EDU = {
+  cls: ['Class 5','Class 6','Class 7','Class 8','Class 9','Class 10','Class 11','Class 12','College / other'],
+  board: ['CBSE','ICSE','ISC','NIOS','State Board','IB','Cambridge','Other'],
+  state: ['Andhra Pradesh','Arunachal Pradesh','Assam','Bihar','Chhattisgarh','Delhi','Goa','Gujarat','Haryana','Himachal Pradesh','Jharkhand','Karnataka','Kerala','Madhya Pradesh','Maharashtra','Manipur','Meghalaya','Mizoram','Nagaland','Odisha','Punjab','Rajasthan','Sikkim','Tamil Nadu','Telangana','Tripura','Uttar Pradesh','Uttarakhand','West Bengal','Jammu & Kashmir','Ladakh','Puducherry','Chandigarh','Other'],
+  stream: ['Science (PCM)','Science (PCB)','Science (PCMB)','Commerce','Arts / Humanities','Other'],
+  medium: ['English','Hindi','Hinglish','Marathi','Gujarati','Bengali','Tamil','Telugu','Kannada','Malayalam','Punjabi','Odia','Assamese','Urdu','Other'],
+  exam: ['None','JEE Main / Advanced','NEET','CUET','Olympiads','NTSE','CLAT','CA Foundation','Board exams only','Other']
+};
+function eduFill(id, label, list, val) {
+  const el = document.getElementById(id); if (!el) return;
+  el.innerHTML = `<option value="">${label}</option>` + list.map(o => `<option value="${escapeHtml(o)}"${o === val ? ' selected' : ''}>${escapeHtml(o)}</option>`).join('');
+}
+function eduToggle() {
+  const cls = document.getElementById('editCls').value, board = document.getElementById('editBoard').value;
+  document.getElementById('editState').style.display = board === 'State Board' ? '' : 'none';
+  document.getElementById('editStream').style.display = (cls === 'Class 11' || cls === 'Class 12') ? '' : 'none';
+}
+function eduRender(me) {
+  const e = me.edu || {};
+  eduFill('editCls', 'Class', EDU.cls, e.cls);
+  eduFill('editBoard', 'Board', EDU.board, e.board);
+  eduFill('editState', 'State (for State Board)', EDU.state, e.state);
+  eduFill('editStream', 'Stream (Class 11–12)', EDU.stream, e.stream);
+  eduFill('editMedium', 'Medium of study', EDU.medium, e.medium);
+  eduFill('editExam', 'Target exam', EDU.exam, e.exam);
+  document.getElementById('editSchool').value = e.school || '';
+  eduToggle();
+  const box = document.getElementById('pfStudies');
+  const parts = [e.cls, e.board === 'State Board' && e.state ? e.state + ' State Board' : e.board, (e.cls === 'Class 11' || e.cls === 'Class 12') ? e.stream : '', e.medium && e.medium + ' medium', e.exam && e.exam !== 'None' ? 'Prep: ' + e.exam : ''].filter(Boolean);
+  if (parts.length) { box.style.display = ''; box.innerHTML = `<span class="profile-field-label">Studies</span><span class="profile-field-val">${parts.map(escapeHtml).join(' · ')}</span>`; }
+  else box.style.display = 'none';
+}
+// Short, school-free line for the AI. Only whitelisted values from EDU are ever sent.
+function eduForAI(u) {
+  const e = (u && u.edu) || {}, ok = (k, v) => v && EDU[k].includes(v) ? v : '';
+  const cls = ok('cls', e.cls), board = ok('board', e.board), state = ok('state', e.state), stream = ok('stream', e.stream), medium = ok('medium', e.medium), exam = ok('exam', e.exam);
+  const bits = [];
+  if (cls) bits.push('class=' + cls);
+  if (board) bits.push('board=' + board + (board === 'State Board' && state ? ' (' + state + ')' : ''));
+  if (stream && (cls === 'Class 11' || cls === 'Class 12')) bits.push('stream=' + stream);
+  if (medium) bits.push('medium=' + medium);
+  if (exam && exam !== 'None') bits.push('target exam=' + exam);
+  return bits.join(', ');
+}
 function renderProfile() {
   const users = storeGet('users') || {};
   const me = users[currentUser.username] || currentUser;
@@ -2609,6 +2665,7 @@ function renderProfile() {
   document.getElementById('pfAge').innerHTML = `<span class="profile-field-label">Age</span><span class="profile-field-val">${me.age}</span>`;
   document.getElementById('pfUsername').innerHTML = `<span class="profile-field-label">Username</span><span class="profile-field-val">@${me.username}</span>`;
   document.getElementById('editAge').value = me.age;
+  eduRender(me);
 
   // Admin panel
   const adminPanel = document.getElementById('adminPanel');
@@ -2683,6 +2740,14 @@ function saveProfile() {
   if (!age) return;
   const users = storeGet('users') || {};
   users[currentUser.username].age = age;
+  const g = id => (document.getElementById(id).value || '').trim();
+  const cls = g('editCls'), board = g('editBoard');
+  users[currentUser.username].edu = {
+    cls, board,
+    state: board === 'State Board' ? g('editState') : '',
+    stream: (cls === 'Class 11' || cls === 'Class 12') ? g('editStream') : '',
+    medium: g('editMedium'), exam: g('editExam'), school: g('editSchool').slice(0, 80)
+  };
   storeSet('users', users);
   currentUser = users[currentUser.username];
   renderProfile();
