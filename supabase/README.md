@@ -1,20 +1,9 @@
-# StudyNest database (Supabase)
+# Turning on Cloud backup (about 5 minutes)
 
-`migrations/20261030000000_studynest_core.sql` creates the whole schema: profiles, friends, WhatsApp-style messages
-(reactions, stars, delete-for-me), notes & question-paper folders/files with sharing, homework, timetable,
-announcements, seating, saved AI chats, private storage buckets, and Row Level Security on every table.
+1. In Supabase, create or open the project to use. Go to **SQL Editor -> New query**, paste `supabase/schema.sql`, press **Run**.
+2. **Authentication -> Providers -> Email**: keep it enabled. Leave "Confirm email" on (recommended). Under **Authentication -> URL Configuration** set the Site URL to your Vercel address.
+3. **Project Settings -> API**: copy the **Project URL** and the **anon / publishable** key. Never use the `service_role` or `sb_secret_` key; the server refuses it.
+4. In Vercel (Settings -> Environment Variables, Production) add `SUPABASE_URL` and `SUPABASE_ANON_KEY`, then Redeploy.
+5. Open the app -> Profile. A "Cloud backup" card appears. Sign-in uses email + password; data is private to each user by Row Level Security.
 
-## Apply it
-1. Supabase dashboard -> the StudyNest project -> **SQL Editor** -> **New query**.
-2. Paste the file and press **Run**. It is safe to run twice; it never drops or rewrites existing tables.
-3. Make yourself an admin (SQL editor only; the app cannot do this):
-   `update public.profiles set role = 'admin' where username = 'your_username';`
-4. Dashboard -> **Authentication -> Providers**: keep Email on and decide whether to require email confirmation.
-
-## Rules the database enforces
-- Logged-out visitors (`anon`) can read and write nothing.
-- You can only message accepted friends; you can edit/delete only your own messages; only the recipient can mark them read.
-- Folders, files, homework and AI chats are private to their owner. Notes are visible to a friend only after you share that subject.
-- Only admins can post announcements or change the timetable. Nobody can sign up or promote themselves to admin.
-- One seat per person per day, and only for today.
-- Never put the `service_role` key in the website. Only the project URL and the public `anon` key belong in frontend code.
+Run the tests: `npm i jsdom @electric-sql/pglite`, then `node tests/schema.test.js` (database rules), `node tests/cloud.test.js`, `node tests/security.test.js`, `node tests/study.test.js`, `node tests/ui.test.js`, `node tests/ai_backend.test.js`.
