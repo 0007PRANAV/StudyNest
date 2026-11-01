@@ -63,7 +63,8 @@
 
   /* BOTTOM NAV */
   .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: var(--surface); border-top: 1px solid var(--border); display: flex; z-index: 200; }
-  .nav-item { flex: 1; display: flex; flex-direction: column; align-items: center; padding: 10px 4px 8px; cursor: pointer; color: var(--muted); font-size: 0.65rem; gap: 3px; transition: color 0.2s; border: none; background: none; }
+  .bottom-nav { overflow-x: auto; scrollbar-width: none; } .bottom-nav::-webkit-scrollbar { display: none; }
+  .nav-item { flex: 1 0 auto; min-width: 50px; display: flex; flex-direction: column; align-items: center; padding: 10px 4px 8px; cursor: pointer; color: var(--muted); font-size: 0.65rem; gap: 3px; transition: color 0.2s; border: none; background: none; }
   .nav-item.active { color: var(--accent); }
   .nav-icon { font-size: 1.35rem; }
 
@@ -439,6 +440,9 @@
     <div id="friendsTabContent"></div>
   </div>
 
+  <!-- STUDY TOOLS -->
+  <div class="page" id="pageStudy"><div id="studyRoot"></div></div>
+
   <!-- AI TUTOR -->
   <div class="page" id="pageAI">
     <div class="flex-between"><div class="section-title" style="margin-bottom:0;">🤖 AI Tutor</div><div style="display:flex;gap:6px;"><button class="ai-mini-btn" onclick="aiHistoryModal()">🕘 History</button><button class="ai-mini-btn" onclick="aiNewChat()">➕ New</button></div></div>
@@ -528,6 +532,9 @@
     </button>
     <button class="nav-item" onclick="showPage('pageTimetable',this)">
       <span class="nav-icon">🗓️</span>Schedule
+    </button>
+    <button class="nav-item" onclick="showPage('pageStudy',this)">
+      <span class="nav-icon">🎯</span>Study
     </button>
     <button class="nav-item" onclick="showPage('pageHomework',this)">
       <span class="nav-icon">📝</span>Homework
@@ -902,6 +909,7 @@ function showPage(id, btn) {
   if (id === 'pageHomework') renderHomework();
   if (id === 'pageProfile') renderProfile();
   document.getElementById('aiFab').classList.toggle('gone', id === 'pageAI'); aiNavH();
+  if (id === 'pageStudy') renderStudy();
   if (id === 'pageAI') aiEnter();
 }
 // keeps the chat box and the floating button exactly above the bottom nav, whatever its height
@@ -2287,6 +2295,154 @@ function aiUsageModal() {
     <div style="display:flex;gap:8px;margin-top:12px;"><button class="btn btn-ghost" style="flex:1;" onclick="aiOpenTest()">🔧 Full AI test</button><button class="btn btn-accent" style="flex:1;" onclick="closeModalDirect()">Close</button></div>`);
   fetch('/api/ai').then(r => r.json()).then(d => { const el = $id('aiConn'); if (!el) return; const n = d.gemini_keys_found || 0; el.innerHTML = row('Gemini keys', n || 'none') + (d.grok_keys_found ? row('Grok keys', d.grok_keys_found) : '') + (d.cohere_keys_found ? row('Cohere keys', d.cohere_keys_found) : '') + row('OpenRouter', d.openrouter_key_found ? 'connected' : 'not set') + row('Free backup AI', 'always on'); el.style.color = 'var(--text)'; }).catch(() => { const el = $id('aiConn'); if (el) el.textContent = 'Could not check right now.'; });
 }
+
+// ===== STUDY TOOLS: planner, flashcards (spaced repetition), quizzes =====
+const sKey = n => n + '_' + currentUser.username, sGet = (n, d) => { const v = storeGet(sKey(n)); return v == null ? d : v; }, sSet = (n, v) => storeSet(sKey(n), v);
+const dstr = d => { d = d || new Date(); return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0'); };
+const DAY = 86400000;
+function studyHours(e) { return { 'Under 1 hour': 0.75, '1–2 hours': 1.5, '2–4 hours': 3, '4–6 hours': 5, '6+ hours': 6.5 }[e.hours] || 2; }
+function studySubjects(e) {
+  const s = e.stream || '', x = e.exam || '';
+  const base = /PCMB/.test(s) ? ['Maths', 'Physics', 'Chemistry', 'Biology'] : /PCM/.test(s) ? ['Maths', 'Physics', 'Chemistry', 'English'] : /PCB/.test(s) ? ['Biology', 'Physics', 'Chemistry', 'English'] : /Commerce/.test(s) ? ['Accountancy', 'Economics', 'English', 'Maths'] : /Arts/.test(s) ? ['Social Science', 'English', 'Hindi', 'Economics'] : /NEET/.test(x) ? ['Biology', 'Physics', 'Chemistry'] : /JEE/.test(x) ? ['Maths', 'Physics', 'Chemistry'] : ['Maths', 'Physics', 'Chemistry', 'English'];
+  (e.hard || []).forEach(x => { if (!base.includes(x)) base.push(x); }); return base;
+}
+// Pure function: the study blocks for one day, based on the student's profile (hard subjects get double time; Sundays are revision).
+function studyPlanFor(e, date, daysLeft) {
+  const total = Math.round(studyHours(e) * 60), ds = dstr(date), dow = date.getDay(), subj = studySubjects(e), hard = new Set(e.hard || []);
+  if (dow === 0) return [{ id: ds + '|revision', subj: 'Revision', task: "Revise this week's notes, do your flashcards, then a short self-test", min: Math.max(45, Math.round(total * 0.6 / 5) * 5) }];
+  const k = dow % subj.length, rot = subj.slice(k).concat(subj.slice(0, k)); let day = rot.slice(0, Math.min(3, rot.length)); const hs = subj.find(s => hard.has(s)); if (hs && !day.includes(hs)) day[day.length - 1] = hs;
+  const w = s => hard.has(s) ? 2 : 1, sum = day.reduce((a, s) => a + w(s), 0), near = daysLeft != null && daysLeft >= 0 && daysLeft <= 30;
+  const tasks = ['Learn the next topic from your notes', near ? 'Solve past papers (timed)' : 'Solve practice questions', 'Revise your notes and fix mistakes'];
+  return day.map((s, i) => ({ id: ds + '|' + s, subj: s, task: tasks[(dow + i) % 3], min: Math.max(20, Math.round(total * w(s) / sum / 5) * 5) }));
+}
+function studyStreak(plan) { const days = new Set(Object.keys(plan.done || {}).filter(k => plan.done[k]).map(k => k.split('|')[0])); let n = 0; const d = new Date(); if (!days.has(dstr(d))) d.setTime(d.getTime() - DAY); while (days.has(dstr(d))) { n++; d.setTime(d.getTime() - DAY); } return n; }
+let studyTab = 'plan', studyQuiz = null, studyReview = null, studyBusy = false;
+function studyTabSet(t) { studyTab = t; studyQuiz = null; studyReview = null; renderStudy(); }
+function studyEdu() { return (currentUser && currentUser.edu) || {}; }
+function studyAsk(prompt) {
+  const sys = 'You write study material for a school student. ' + (eduForAI(currentUser) ? 'STUDENT PROFILE: ' + eduForAI(currentUser) + '. ' : '') + 'Reply with ONLY valid JSON, no markdown fences and no commentary. Only include facts you are certain are correct for the syllabus; skip anything you are unsure about.';
+  return callAI({ system: sys, messages: [{ role: 'user', content: prompt }], max_tokens: 3000, web: false }).then(r => ((r.content || []).map(b => b.text || '').join('')));
+}
+function studyJSON(t) { t = String(t || '').replace(/```(?:json)?/gi, ''); const a = t.indexOf('['), b = t.lastIndexOf(']'); if (a < 0 || b <= a) throw new Error('The AI did not return a usable list. Please try again.'); try { return JSON.parse(t.slice(a, b + 1)); } catch (e) { throw new Error('The AI reply was not valid. Please try again.'); } }
+const studyClip = (s, n) => String(s == null ? '' : s).replace(/\s+/g, ' ').trim().slice(0, n);
+async function studyMakeCards(topic, n, deck) {
+  const arr = studyJSON(await studyAsk('Make ' + n + ' flashcards about: ' + studyClip(topic, 2200) + '\nFormat: [{"front":"question or term","back":"short correct answer, max 25 words"}]. Match the student\'s class and board.'));
+  const cards = sGet('cards', []), now = Date.now(); let added = 0;
+  arr.forEach(c => { const f = studyClip(c && c.front, 200), b = studyClip(c && c.back, 400); if (f && b && !cards.some(x => x.front === f)) { cards.push({ id: uid(), front: f, back: b, deck: studyClip(deck || 'General', 40), box: 1, due: now, ok: 0, bad: 0, created: now }); added++; } });
+  sSet('cards', cards); return added;
+}
+function studyShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+async function studyMakeQuiz(topic, n) {
+  const arr = studyJSON(await studyAsk('Make ' + n + ' multiple-choice questions about: ' + studyClip(topic, 2200) + '\nFormat: [{"q":"question","options":["A","B","C","D"],"answer":0,"why":"one-sentence explanation"}]. Exactly 4 options and exactly one correct option; "answer" is the 0-based index of the correct option. Match the student\'s class and board.'));
+  const qs = arr.filter(x => x && x.q && Array.isArray(x.options) && x.options.length === 4 && Number.isInteger(x.answer) && x.answer >= 0 && x.answer < 4).map(x => { const opts = x.options.map((t, i) => ({ t: studyClip(t, 200), c: i === x.answer })); studyShuffle(opts); return { q: studyClip(x.q, 400), opts, why: studyClip(x.why, 400) }; });
+  if (!qs.length) throw new Error('The AI did not make valid questions. Please try again.'); return qs;
+}
+// ---- rendering ----
+function renderStudy() {
+  const root = document.getElementById('studyRoot'); if (!root || !currentUser) return;
+  const tab = (id, l) => `<button class="ai-mini-btn" style="${studyTab === id ? 'background:var(--accent);color:#000;' : ''}" onclick="studyTabSet('${id}')">${l}</button>`;
+  const dueN = sGet('cards', []).filter(c => c.due <= Date.now()).length;
+  root.innerHTML = `<div class="section-title">🎯 Study</div><div style="display:flex;gap:6px;margin-bottom:12px;">${tab('plan', '📅 Plan')}${tab('cards', '🃏 Cards' + (dueN ? ' (' + dueN + ')' : ''))}${tab('quiz', '📝 Quiz')}</div><div id="studyBody"></div>`;
+  ({ plan: studyPlanUI, cards: studyCardsUI, quiz: studyQuizUI })[studyTab]();
+}
+function studyPlanUI() {
+  const e = studyEdu(), plan = sGet('plan', { examDate: '', done: {} }), el = document.getElementById('studyBody'), now = new Date();
+  const left = plan.examDate ? Math.ceil((new Date(plan.examDate + 'T00:00:00') - new Date(dstr() + 'T00:00:00')) / DAY) : null;
+  const today = studyPlanFor(e, now, left), doneN = today.filter(b => plan.done[b.id]).length, pct = today.length ? Math.round(doneN / today.length * 100) : 0, streak = studyStreak(plan);
+  const examName = e.exam && e.exam !== 'None' ? e.exam + (e.year ? ' ' + e.year : '') : (e.cls ? e.cls + ' exams' : 'Your exams');
+  const week = Array.from({ length: 7 }, (_, i) => { const d = new Date(now.getTime() - (6 - i) * DAY), ds = dstr(d), blocks = studyPlanFor(e, d, null), dn = blocks.filter(b => plan.done[b.id]).length; return `<div style="text-align:center;font-size:.62rem;color:var(--muted);"><div style="width:30px;height:30px;border-radius:50%;margin:0 auto 3px;display:flex;align-items:center;justify-content:center;background:${dn === blocks.length && dn ? 'var(--accent)' : dn ? 'rgba(0,245,200,.35)' : 'var(--border)'};color:${dn ? '#000' : 'var(--muted)'};">${['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()]}</div>${ds === dstr() ? 'today' : ''}</div>`; }).join('');
+  el.innerHTML = `<div class="card"><div style="font-weight:700;">${escapeHtml(examName)}</div>
+    <div style="font-size:.8rem;color:var(--muted);margin:4px 0 8px;">${left == null ? 'Set your exam date to see the countdown.' : left > 0 ? '<b style="color:var(--accent);font-size:1.1rem;">' + left + '</b> days to go' : left === 0 ? 'Exam day. You have got this!' : 'This exam date has passed.'}</div>
+    <input class="inp" type="date" value="${escapeHtml(plan.examDate || '')}" onchange="studySetExam(this.value)" style="margin-bottom:0;"></div>
+    ${!e.hours && !e.hard ? '<div class="card mt-12" style="font-size:.8rem;">💡 Add your class, exam, daily study time and hard subjects in <a href="#" onclick="goProfile();return false;" style="color:var(--accent);">Profile</a> to get a plan made for you.</div>' : ''}
+    <div class="card mt-12"><div class="flex-between"><div style="font-weight:600;">Today's plan</div><div style="font-size:.8rem;">🔥 ${streak} day${streak === 1 ? '' : 's'}</div></div>
+    <div style="height:6px;background:var(--border);border-radius:5px;margin:8px 0 10px;overflow:hidden;"><div style="height:100%;width:${pct}%;background:var(--accent);"></div></div>
+    ${today.map(b => `<label style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-top:1px solid var(--border);cursor:pointer;"><input type="checkbox" ${plan.done[b.id] ? 'checked' : ''} onchange="studyToggle('${escapeHtml(b.id)}')" style="margin-top:3px;accent-color:var(--accent);"><span style="${plan.done[b.id] ? 'opacity:.55;text-decoration:line-through;' : ''}"><b>${escapeHtml(b.subj)}</b> · ${b.min} min<br><span style="font-size:.78rem;color:var(--muted);">${escapeHtml(b.task)}</span></span></label>`).join('')}</div>
+    <div class="card mt-12"><div style="font-weight:600;margin-bottom:8px;">Last 7 days</div><div style="display:flex;justify-content:space-between;">${week}</div></div>
+    <button class="btn btn-accent w-full mt-12" onclick="studyAskAIPlan()">✨ Ask the AI to refine my plan</button>`;
+}
+function studySetExam(v) { const p = sGet('plan', { examDate: '', done: {} }); p.examDate = /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : ''; sSet('plan', p); renderStudy(); }
+function studyToggle(id) { const p = sGet('plan', { examDate: '', done: {} }); p.done = p.done || {}; if (p.done[id]) delete p.done[id]; else p.done[id] = Date.now(); sSet('plan', p); studyPlanUI(); }
+function studyAskAIPlan() {
+  const e = studyEdu(), plan = sGet('plan', {}), left = plan.examDate ? Math.ceil((new Date(plan.examDate + 'T00:00:00') - new Date(dstr() + 'T00:00:00')) / DAY) : null;
+  showPage('pageAI', document.querySelector('.nav-item[onclick*="pageAI"]'));
+  setTimeout(() => { $id('aiInput').value = 'Make me a realistic weekly study plan' + (left != null && left > 0 ? ' for the ' + left + ' days left before my exam' : '') + '. Use my profile (class, board, exam, hours per day, hard subjects). Give each day with subject blocks and minutes, put hard subjects first, add a weekly revision and test, and keep it short.'; $id('aiInput').focus(); }, 150);
+}
+function studyCardsUI() {
+  const cards = sGet('cards', []), el = document.getElementById('studyBody'), now = Date.now(), due = cards.filter(c => c.due <= now);
+  if (studyReview) return studyReviewUI();
+  el.innerHTML = `<div class="card"><div style="display:flex;justify-content:space-between;font-size:.85rem;"><span>Cards <b>${cards.length}</b></span><span>Due now <b style="color:var(--accent);">${due.length}</b></span><span>Learned <b>${cards.filter(c => c.box >= 4).length}</b></span></div>
+    <button class="btn btn-primary w-full" style="margin-top:10px;" ${due.length ? '' : 'disabled'} onclick="studyStartReview()">▶ Review ${due.length} card${due.length === 1 ? '' : 's'}</button></div>
+    <div class="card mt-12"><div style="font-weight:600;margin-bottom:6px;">Make cards with AI</div>
+    <textarea class="inp" id="cardTopic" rows="3" placeholder="Type a topic (e.g. Newton's laws, Class 10) or paste your notes" style="margin-bottom:8px;"></textarea>
+    <div style="display:flex;gap:8px;"><select class="inp" id="cardN" style="flex:0 0 90px;margin:0;"><option>5</option><option selected>8</option><option>12</option></select><button class="btn btn-accent" style="flex:1;" id="cardMake" onclick="studyCardsFromForm()">🃏 Make cards</button></div>
+    <details style="margin-top:10px;"><summary style="font-size:.8rem;color:var(--muted);cursor:pointer;">✍️ Add one card myself</summary><input class="inp" id="cardF" placeholder="Front (question)" style="margin:8px 0;"><input class="inp" id="cardB" placeholder="Back (answer)" style="margin-bottom:8px;"><button class="btn btn-ghost w-full" onclick="studyAddCard()">Add card</button></details></div>
+    <div class="card mt-12"><div style="font-weight:600;margin-bottom:6px;">All cards</div>${cards.length ? cards.slice().reverse().slice(0, 60).map(c => `<div style="display:flex;gap:8px;align-items:flex-start;padding:7px 0;border-top:1px solid var(--border);font-size:.8rem;"><div style="flex:1;"><b>${escapeHtml(c.front)}</b><br><span style="color:var(--muted);">${escapeHtml(c.back)}</span><br><span style="font-size:.66rem;color:var(--muted);">${escapeHtml(c.deck)} · box ${c.box}</span></div><button class="ai-mini-btn" onclick="studyDelCard('${c.id}')">🗑️</button></div>`).join('') : '<div style="color:var(--muted);font-size:.82rem;">No cards yet. Make some above, or tap 🃏 Cards under any AI answer.</div>'}</div>`;
+}
+async function studyCardsFromForm() {
+  if (studyBusy) return; const t = $id('cardTopic').value.trim(); if (t.length < 3) { showToast('Type a topic or paste some notes first'); return; }
+  studyBusy = true; const b = $id('cardMake'); b.textContent = 'Making…'; b.disabled = true;
+  try { const n = await studyMakeCards(t, parseInt($id('cardN').value) || 8, studyClip(t, 30)); showToast(n ? n + ' cards added ✓' : 'No new cards (they may already exist)'); } catch (e) { showToast(e.message || 'Could not make cards'); }
+  studyBusy = false; if (studyTab === 'cards') studyCardsUI();
+}
+function studyAddCard() { const f = studyClip($id('cardF').value, 200), b = studyClip($id('cardB').value, 400); if (!f || !b) { showToast('Fill both sides'); return; } const c = sGet('cards', []); c.push({ id: uid(), front: f, back: b, deck: 'My cards', box: 1, due: Date.now(), ok: 0, bad: 0, created: Date.now() }); sSet('cards', c); studyCardsUI(); }
+function studyDelCard(id) { sSet('cards', sGet('cards', []).filter(c => c.id !== id)); renderStudy(); }
+function studyStartReview() { const q = studyShuffle(sGet('cards', []).filter(c => c.due <= Date.now()).map(c => c.id)).slice(0, 30); if (!q.length) return; studyReview = { q, i: 0, show: false, ok: 0 }; studyCardsUI(); }
+function studyReviewUI() {
+  const r = studyReview, el = document.getElementById('studyBody'), cards = sGet('cards', []);
+  if (r.i >= r.q.length) { el.innerHTML = `<div class="card" style="text-align:center;"><div style="font-size:2rem;">🎉</div><div style="font-weight:700;margin:6px 0;">Session done</div><div style="color:var(--muted);font-size:.85rem;">${r.ok} of ${r.q.length} remembered</div><button class="btn btn-accent w-full" style="margin-top:12px;" onclick="studyTabSet('cards')">Back to cards</button></div>`; return; }
+  const c = cards.find(x => x.id === r.q[r.i]); if (!c) { r.i++; return studyReviewUI(); }
+  el.innerHTML = `<div class="card" style="text-align:center;"><div style="font-size:.72rem;color:var(--muted);">${r.i + 1} / ${r.q.length} · ${escapeHtml(c.deck)}</div><div style="font-size:1.05rem;font-weight:600;margin:18px 0;min-height:60px;">${escapeHtml(c.front)}</div>
+    ${r.show ? `<div style="padding:12px;border-radius:12px;background:rgba(0,245,200,.1);margin-bottom:12px;">${escapeHtml(c.back)}</div><div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;"><button class="ai-mini-btn" onclick="studyGrade('again')">Again</button><button class="ai-mini-btn" onclick="studyGrade('hard')">Hard</button><button class="ai-mini-btn" onclick="studyGrade('good')">Good</button><button class="ai-mini-btn" onclick="studyGrade('easy')">Easy</button></div>` : '<button class="btn btn-accent w-full" onclick="studyReveal()">Show answer</button>'}
+    <button class="ai-mini-btn" style="margin-top:12px;" onclick="studyTabSet('cards')">Stop</button></div>`;
+}
+function studyReveal() { studyReview.show = true; studyReviewUI(); }
+const BOX_DAYS = [0, 1, 2, 4, 8, 16];
+function studyGrade(g) {
+  const r = studyReview, cards = sGet('cards', []), c = cards.find(x => x.id === r.q[r.i]); if (c) {
+    if (g === 'again') { c.box = 1; c.due = Date.now() + 10 * 60000; c.bad = (c.bad || 0) + 1; }
+    else if (g === 'hard') { c.due = Date.now() + DAY; c.bad = (c.bad || 0) + 1; }
+    else { c.box = Math.min(5, (c.box || 1) + (g === 'easy' ? 2 : 1)); c.due = Date.now() + BOX_DAYS[c.box] * DAY; c.ok = (c.ok || 0) + 1; r.ok++; }
+    sSet('cards', cards);
+  }
+  r.i++; r.show = false; studyReviewUI();
+}
+function studyQuizUI() {
+  const el = document.getElementById('studyBody'), hist = sGet('quiz', []), q = studyQuiz;
+  if (q && q.i < q.qs.length) {
+    const cur = q.qs[q.i], picked = q.picks[q.i];
+    el.innerHTML = `<div class="card"><div style="font-size:.72rem;color:var(--muted);">Question ${q.i + 1} of ${q.qs.length}</div><div style="font-weight:600;margin:10px 0;">${escapeHtml(cur.q)}</div>
+      ${cur.opts.map((o, i) => `<button class="btn w-full" style="text-align:left;margin-bottom:8px;background:${picked == null ? 'var(--card)' : o.c ? 'rgba(0,245,200,.25)' : i === picked ? 'rgba(239,68,68,.25)' : 'var(--card)'};" ${picked == null ? `onclick="studyPick(${i})"` : 'disabled'}>${escapeHtml(o.t)}</button>`).join('')}
+      ${picked != null ? `<div style="font-size:.8rem;margin:6px 0 10px;">${cur.opts[picked].c ? '✅ Correct.' : '❌ Not quite.'} ${escapeHtml(cur.why)}</div><button class="btn btn-accent w-full" onclick="studyNextQ()">${q.i + 1 < q.qs.length ? 'Next ➜' : 'See result'}</button>` : ''}</div>`; return;
+  }
+  if (q) {
+    const score = q.picks.filter((p, i) => p != null && q.qs[i].opts[p].c).length, missed = q.qs.filter((x, i) => !(q.picks[i] != null && x.opts[q.picks[i]].c));
+    el.innerHTML = `<div class="card" style="text-align:center;"><div style="font-size:2rem;">${score === q.qs.length ? '🏆' : score >= q.qs.length / 2 ? '👍' : '💪'}</div><div style="font-weight:700;font-size:1.2rem;">${score} / ${q.qs.length}</div><div style="color:var(--muted);font-size:.8rem;margin-bottom:10px;">${escapeHtml(q.topic)}</div>
+      ${missed.length ? `<button class="btn btn-accent w-full" onclick="studyMissedToCards()">🃏 Save ${missed.length} missed as flashcards</button>` : ''}<button class="btn btn-ghost w-full" style="margin-top:8px;" onclick="studyTabSet('quiz')">New quiz</button></div>`; return;
+  }
+  const by = {}; hist.forEach(h => { (by[h.topic] = by[h.topic] || []).push(h.score / h.total); }); const weak = Object.keys(by).map(t => ({ t, a: by[t].reduce((x, y) => x + y, 0) / by[t].length })).sort((a, b) => a.a - b.a).slice(0, 3);
+  el.innerHTML = `<div class="card"><div style="font-weight:600;margin-bottom:6px;">Make a quiz</div><textarea class="inp" id="quizTopic" rows="3" placeholder="Type a topic (e.g. Acids and bases) or paste your notes" style="margin-bottom:8px;"></textarea>
+    <div style="display:flex;gap:8px;"><select class="inp" id="quizN" style="flex:0 0 90px;margin:0;"><option>5</option><option selected>8</option><option>10</option></select><button class="btn btn-accent" style="flex:1;" id="quizMake" onclick="studyQuizFromForm()">📝 Start quiz</button></div></div>
+    ${hist.length ? `<div class="card mt-12"><div style="font-weight:600;margin-bottom:6px;">Your progress</div><div style="font-size:.82rem;">Quizzes taken: <b>${hist.length}</b> · Average: <b>${Math.round(hist.reduce((a, h) => a + h.score / h.total, 0) / hist.length * 100)}%</b></div>${weak.length ? '<div style="font-size:.78rem;color:var(--muted);margin-top:6px;">Needs work: ' + weak.map(w => escapeHtml(w.t) + ' (' + Math.round(w.a * 100) + '%)').join(', ') + '</div>' : ''}</div>` : ''}`;
+}
+async function studyQuizFromForm() {
+  if (studyBusy) return; const t = $id('quizTopic').value.trim(); if (t.length < 3) { showToast('Type a topic or paste some notes first'); return; }
+  studyBusy = true; const b = $id('quizMake'); b.textContent = 'Making quiz…'; b.disabled = true;
+  try { const qs = await studyMakeQuiz(t, parseInt($id('quizN').value) || 8); studyQuiz = { qs, i: 0, picks: [], topic: studyClip(t, 40) }; } catch (e) { showToast(e.message || 'Could not make the quiz'); }
+  studyBusy = false; if (studyTab === 'quiz') studyQuizUI();
+}
+function studyPick(i) { studyQuiz.picks[studyQuiz.i] = i; studyQuizUI(); }
+function studyNextQ() {
+  const q = studyQuiz; q.i++;
+  if (q.i >= q.qs.length) { const score = q.picks.filter((p, i) => p != null && q.qs[i].opts[p].c).length, hist = sGet('quiz', []); hist.push({ ts: Date.now(), topic: q.topic, score, total: q.qs.length }); sSet('quiz', hist.slice(-50)); }
+  studyQuizUI();
+}
+function studyMissedToCards() {
+  const q = studyQuiz, cards = sGet('cards', []), now = Date.now(); let n = 0;
+  q.qs.forEach((x, i) => { if (q.picks[i] != null && x.opts[q.picks[i]].c) return; const f = x.q, b = x.opts.find(o => o.c).t + (x.why ? ' — ' + x.why : ''); if (!cards.some(c => c.front === f)) { cards.push({ id: uid(), front: f, back: studyClip(b, 400), deck: q.topic || 'Quiz', box: 1, due: now, ok: 0, bad: 0, created: now }); n++; } });
+  sSet('cards', cards); showToast(n + ' cards saved ✓'); studyTabSet('cards');
+}
+
 // ===== PRIVACY & DATA =====
 function privacyModal() {
   openModal(`<div class="modal-title">🔒 Privacy notice</div><div style="font-size:.82rem;line-height:1.65;max-height:66vh;overflow:auto;">
@@ -2336,7 +2492,7 @@ let aiRaf = 0, aiCurX = null, aiForceWeb = false;
 function aiActs(e) {
   const b = (a, l, t) => `<button class="ai-mini-btn" title="${t}" onclick="aiMsgAct('${a}',this)">${l}</button>`;
   if (e.k === 'user') return '<div class="ai-msg-actions">' + (/^[🎨🎬]/.test(e.text || '') ? '' : b('edit', '✏️ Edit', 'Edit and resend')) + b('copy', '📋 Copy', 'Copy') + b('del', '🗑️ Delete', 'Delete this message and its answer') + '</div>';
-  if (e.k === 'ai') return '<div class="ai-msg-actions">' + b('copy', '📋 Copy', 'Copy answer') + b('redo', '🔄 Redo', 'Ask again') + b('verify', '🔍 Verify', 'Double-check this answer with the web') + b('simple', '✂️ Simpler', 'Explain more simply') + b('more', '➕ Deeper', 'More detail') + b('note', '📓 Save', 'Save to Notes') + b('del', '🗑️ Delete', 'Delete') + '</div>';
+  if (e.k === 'ai') return '<div class="ai-msg-actions">' + b('copy', '📋 Copy', 'Copy answer') + b('redo', '🔄 Redo', 'Ask again') + b('verify', '🔍 Verify', 'Double-check this answer with the web') + b('simple', '✂️ Simpler', 'Explain more simply') + b('more', '➕ Deeper', 'More detail') + b('cards', '🃏 Cards', 'Make flashcards from this answer') + b('note', '📓 Save', 'Save to Notes') + b('del', '🗑️ Delete', 'Delete') + '</div>';
   if (e.k === 'error') return '<div class="ai-msg-actions">' + b('redo', '🔄 Retry', 'Send again') + b('del', '🗑️ Delete', 'Remove this message') + '</div>';
   return '';
 }
@@ -2360,6 +2516,7 @@ function aiMsgAct(act, btn) {
   if (act === 'edit') { const i = aiLog.findIndex(e => e.x === x), later = aiLog.slice(i + 1).some(e => e.k === 'user' && e.x !== x); if (later && !confirm('Editing removes this message and everything after it. Continue?')) return; const q = uq(); aiDropEx(x, true); const inp = $id('aiInput'); inp.value = q; inp.focus(); return; }
   if (act === 'verify') { aiForceWeb = true; $id('aiInput').value = 'Fact-check your previous answer. Re-do any calculation from scratch and check every fact against reliable sources. Reply with: ✅ what is correct, ⚠️ anything wrong or uncertain with the fix, and what I should confirm in my textbook or on an official site. Do not repeat the whole answer.'; sendAI(); return; }
   if (act === 'simple' || act === 'more') { $id('aiInput').value = act === 'simple' ? 'Explain that again in simpler words, with one short real-life example.' : 'Go deeper: give more detail, the steps, and one worked example.'; sendAI(); return; }
+  if (act === 'cards') { const t = (ent && ent.text) || ''; if (!t) return; showToast('Making flashcards…'); studyMakeCards('From my AI chat: ' + t.slice(0, 1800), 6, 'AI chat').then(n => showToast(n ? n + ' flashcards added ✓ (Study → Cards)' : 'Could not make cards')).catch(e => showToast(e.message || 'Could not make cards')); return; }
   if (act === 'note') { const text = (ent && ent.text) || ''; if (!text) return; aiRun({ type: 'save_note', kind: 'notes', subject: getSubj('notes'), title: aiClip(uq() || 'AI answer', 40), text }).then(r => { aiRefreshViews(); showToast(r || 'Could not save the note'); }).catch(() => showToast('Could not save the note. Check your browser storage.')); }
 }
 function aiQuick(t) { $id('aiInput').value = t; sendAI(); }
