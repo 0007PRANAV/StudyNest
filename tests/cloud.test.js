@@ -45,6 +45,8 @@ const sleep = ms => new Promise(r => setTimeout(r, ms));
   const s = ev('cloudSess()'); s.exp = 1; ev(`storeSet('cloud_kid', ${JSON.stringify(s)})`); ev("storeSet('hw_kid', [{id:2,subj:'physics',text:'after refresh',done:false}])"); await ev('cloudBackup(true)'); assert.strictEqual(S.refreshed, 1); assert.ok(S.posts[S.posts.length - 1].tok === 'tok2'); console.log('token refresh ok');
   // restore on a "new phone"
   ev("localStorage.removeItem('sn_hw_kid'); localStorage.removeItem('sn_cards_kid');"); await ev('cloudRestore()'); assert.strictEqual(ev("storeGet('hw_kid')[0].text"), 'after refresh'); assert.ok(ev("storeGet('cards_kid')[0].front") === 'f'); console.log('restore ok');
+  // missing database table gives a clear message
+  assert.ok(/schema\.sql/.test(ev("cloudErr({ code: 'PGRST205', message: \"Could not find the table 'public.user_data' in the schema cache\" }, 404)"))); console.log('missing-table message ok');
   // sign out
   ev('cloudSignOut()'); await sleep(80); assert.strictEqual(ev("cloudSess()"), null); assert.ok(d.getElementById('cloudEmail')); console.log('sign out ok');
   console.log('page errors:', errs); assert.strictEqual(errs.length, 0); console.log('CLOUD ALL PASSED'); process.exit(0);

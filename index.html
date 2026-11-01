@@ -2450,7 +2450,7 @@ let CLOUD = { cfg: null, sig: '', timer: 0, busy: false };
 async function cloudCfg() { if (CLOUD.cfg !== null) return CLOUD.cfg; try { const r = await fetch('/api/config'), d = await r.json(); CLOUD.cfg = d && d.supabaseUrl && d.supabaseAnonKey ? d : false; } catch (e) { CLOUD.cfg = false; } return CLOUD.cfg; }
 const cloudSess = () => currentUser ? storeGet('cloud_' + currentUser.username) : null;
 const cloudHdr = (cfg, tok) => ({ apikey: cfg.supabaseAnonKey, Authorization: 'Bearer ' + (tok || cfg.supabaseAnonKey), 'Content-Type': 'application/json' });
-function cloudErr(d, st) { const m = d && (d.error_description || d.msg || d.message || d.error); return typeof m === 'string' ? m : 'Cloud error (HTTP ' + st + ')'; }
+function cloudErr(d, st) { const m = d && (d.error_description || d.msg || d.message || d.error); if ((d && /^PGRST20[0-9]$/.test(d.code || '')) || /user_data|schema cache|does not exist/i.test(String(m || ''))) return 'Cloud backup is not finished being set up on the server yet. The app owner needs to run supabase/schema.sql once in Supabase.'; return typeof m === 'string' ? m : 'Cloud error (HTTP ' + st + ')'; }
 async function cloudPost(cfg, path, body, tok, extra) {
   const r = await fetch(cfg.supabaseUrl + path, { method: 'POST', headers: Object.assign(cloudHdr(cfg, tok), extra || {}), body: JSON.stringify(body) }); const t = await r.text(); let d = null; try { d = t ? JSON.parse(t) : null; } catch (e) {}
   if (!r.ok) throw new Error(cloudErr(d, r.status)); return d;
