@@ -521,6 +521,7 @@
       <div style="font-weight:700;color:var(--accent3);margin-bottom:14px;">⚡ Admin Panel</div>
       <div id="adminUserList"></div>
     </div>
+    <div id="quotaCard"></div>
     <button class="btn btn-ghost w-full mt-16" onclick="doLogout()">Log Out</button>
     <input type="file" id="pfpFileInput" accept="image/*" style="display:none;" onchange="handlePfpUpload(event)">
   </div>
@@ -765,8 +766,22 @@ let currentFriendsTab = 'friends';
 let chatPartner = null;
 
 // ===== INIT =====
-function init() {
+async function init() {
+  // Try to restore Supabase session first
+  let sbOk = false;
+  try { sbOk = await sbRestoreSession(); } catch(e) {}
   const sess = storeGet('session');
+  if (sbOk) {
+    // Supabase authed: load profile from Supabase
+    const uid = localStorage.getItem('sb_uid');
+    const prof = uid ? await sbGetProfile(uid) : null;
+    if (prof) {
+      currentUser = { username: prof.username, name: prof.name, role: prof.role || 'student', pfp: prof.avatar_path || null, suspended: false, sbUid: uid };
+      if (currentUser.suspended) { showSuspended(); return; }
+      showApp();
+      return;
+    }
+  }
   if (sess) {
     const users = storeGet('users') || {};
     if (users[sess]) {
@@ -846,8 +861,27 @@ async function pwHash(p, saltB64) {
 async function doLogin() {
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value;
-  const users = storeGet('users') || {};
   const err = document.getElementById('loginErr');
+  // Try Supabase Auth first (email = username@studynest.local for local users without real email)
+  let sbOk = false;
+  try {
+    const d = await sbLogin(u + '@studynest.local', p);
+    sbOk = true;
+    const uid = localStorage.getItem('sb_uid');
+    const prof = uid ? await sbGetProfile(uid) : null;
+    if (prof) {
+      currentUser = { username: prof.username, name: prof.name, role: prof.role || 'student', pfp: prof.avatar_path || null, suspended: false, sbUid: uid };
+      // Also keep local users record in sync
+      const users = storeGet('users') || {};
+      if (!users[u]) { users[u] = { username: u, name: prof.name, role: prof.role || 'student', pfp: prof.avatar_path || null, suspended: false, friends: [], pendingOut: [], pendingIn: [], joinedAt: Date.now() }; storeSet('users', users); }
+      storeSet('session', u);
+      err.style.display='none';
+      showApp();
+      return;
+    }
+  } catch(e) { /* fall through to local auth */ }
+  // Fallback: localStorage auth
+  const users = storeGet('users') || {};
   const rec = Object.prototype.hasOwnProperty.call(users, u) ? users[u] : null; let ok = false;
   try {
     if (rec && rec.pwh && pwOK()) ok = (await pwHash(p, rec.salt)).hash === rec.pwh;
@@ -873,8 +907,18 @@ async function doSignup() {
   if (p.length < 6) { err.textContent = 'Password must be at least 6 characters'; err.style.display='block'; return; }
   const users = storeGet('users') || {};
   if (Object.prototype.hasOwnProperty.call(users, u)) { err.textContent = 'Username taken'; err.style.display='block'; return; }
+  // Create Supabase auth user + profile
+  let sbUid = null;
+  try {
+    const d = await sbSignup(u + '@studynest.local', p, { data: { username: u, name: name, age: parseInt(age) } });
+    sbUid = d.user && d.user.id;
+    if (!sbUid && !d.access_token) throw new Error('Supabase signup failed');
+  } catch(e) {
+    // If email already exists in Supabase, try login instead
+    try { await sbLogin(u + '@studynest.local', p); sbUid = localStorage.getItem('sb_uid'); } catch(e2) { sbUid = null; }
+  }
   const isFirstAdmin = Object.keys(users).length === 0 || u === ADMIN_USER;
-  const newUser = { username: u, name, age: parseInt(age), role: isFirstAdmin ? 'admin' : 'student', pfp: null, suspended: false, friends: [], pendingOut: [], pendingIn: [], joinedAt: Date.now() };
+  const newUser = { username: u, name, age: parseInt(age), role: isFirstAdmin ? 'admin' : 'student', pfp: null, suspended: false, friends: [], pendingOut: [], pendingIn: [], joinedAt: Date.now(), sbUid };
   if (pwOK()) { const hh = await pwHash(p); newUser.salt = hh.salt; newUser.pwh = hh.hash; } else newUser.password = p;
   users[u] = newUser;
   storeSet('users', users);
@@ -884,7 +928,10 @@ async function doSignup() {
   showApp();
 }
 
-function doLogout() { storeSet('session', null); currentUser = null; showAuth(); }
+async function doLogout() {
+  try { await sbLogout(); } catch(e) {}
+  storeSet('session', null); currentUser = null; showAuth();
+}
 
 // ===== TOPBAR =====
 function renderTopbar() {
@@ -1768,6 +1815,12 @@ function seedTimetable() {
     Saturday: [{time:'8:00–9:00',subj:'📐 Maths',room:'Room 3'},{time:'9:10–10:10',subj:'⚗️ Chemistry',room:'Lab 1'}],
   };
   storeSet('timetable', tt);
+  // Push to Supabase (best effort, never blocks)
+  (async () => {
+    try {
+      for (const d of Object.keys(tt)) { await sbSetTimetable(d, tt[d]); }
+    } catch(e) { /* Supabase not available — local data is the source of truth */ }
+  })();
 }
 function renderTimetable() {
   const tt = storeGet('timetable') || {};
@@ -1786,22 +1839,31 @@ function renderTimetable() {
 }
 
 // ===== HOMEWORK =====
-function addHomework() {
+async function addHomework() {
   const text = document.getElementById('hwText').value.trim();
   const subj = document.getElementById('hwSubject').value;
   if (!text) return;
+  // Supabase first
+  try {
+    await sbAddHomework(subj, text);
+    await sbRecordUsage('homework_add', 1);
+  } catch(e) { /* fall back to local */ }
   const hw = storeGet('hw_' + currentUser.username) || [];
   hw.unshift({ id: Date.now(), text, subj, done: false, ts: Date.now() });
   storeSet('hw_' + currentUser.username, hw);
   document.getElementById('hwText').value = '';
   renderHomework();
 }
-function toggleHW(id) {
+async function toggleHW(id) {
+  try {
+    await sbToggleHomework(id, true); // best effort; local handles actual state
+  } catch(e) {}
   const hw = storeGet('hw_' + currentUser.username) || [];
   const item = hw.find(h => h.id === id);
   if (item) { item.done = !item.done; storeSet('hw_' + currentUser.username, hw); renderHomework(); }
 }
 function deleteHW(id) {
+  try { sbDeleteHomework(id); } catch(e) {}
   const hw = (storeGet('hw_' + currentUser.username) || []).filter(h => h.id !== id);
   storeSet('hw_' + currentUser.username, hw);
   renderHomework();
@@ -1835,6 +1897,13 @@ function renderSeating() {
   if (label) label.innerHTML = `📅 ${dayName} — Group ${dayNum % 2 === 0 ? 'A' : 'B'} (refreshes daily)`;
   const seatKey = 'seats_' + dayNum;
   let seats = storeGet(seatKey) || {};
+  // Supabase read (best effort, non-blocking)
+  (async () => {
+    try {
+      const day = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
+      await sbGetSeats(day); // data not yet used for rendering; local is source of truth
+    } catch(e) {}
+  })();
   const grid = document.getElementById('seatingGrid');
   if (!grid) return;
   let html = '';
@@ -1855,17 +1924,22 @@ function renderSeating() {
   }
   grid.innerHTML = html;
 }
-function claimSeat(sid) {
+async function claimSeat(sid) {
   const { dayNum } = getSeatDay();
+  const day = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
   const seatKey = 'seats_' + dayNum;
   let seats = storeGet(seatKey) || {};
   // Remove current user from any seat
   Object.keys(seats).forEach(k => { if (seats[k] === currentUser.username) delete seats[k]; });
   // If clicking own seat, just unclaim
-  if (seats[sid] === currentUser.username) { storeSet(seatKey, seats); renderSeating(); return; }
+  if (seats[sid] === currentUser.username) {
+    try { await sbReleaseSeat(day, parseInt(sid.split('_')[0]), parseInt(sid.split('_')[1])); } catch(e) {}
+    storeSet(seatKey, seats); renderSeating(); return;
+  }
   // If taken by someone else, show who
   if (seats[sid]) { showToast('🟣 Seat taken by ' + (storeGet('users')||{})[seats[sid]]?.name); return; }
   seats[sid] = currentUser.username;
+  try { await sbClaimSeat(day, parseInt(sid.split('_')[0]), parseInt(sid.split('_')[1])); await sbRecordUsage('seat_claim', 1); } catch(e) {}
   storeSet(seatKey, seats);
   renderSeating();
 }
@@ -1901,10 +1975,10 @@ function renderFriendSearch(content) {
     const isPendingOut = pendingOut.includes(u.username);
     const isPendingIn = pendingIn.includes(u.username);
     let actionBtn = '';
-    if (isFriend) actionBtn = `<button class="user-action ua-friend" onclick="removeFriend('${u.username}')">Friends ✓</button>`;
+    if (isFriend) actionBtn = `<button class="user-action ua-friend" onclick="removeFriend('${u.username}')">Friends ✓</button><button class="user-action ua-invite" style="background:rgba(239,68,68,.15);color:var(--danger);" onclick="reportUser('${u.username}','')">🚩 Report</button><button class="user-action ua-invite" style="background:rgba(120,60,180,0.15);color:#a78bfa;" onclick="blockUser('${u.username}')">🚫 Block</button>`;
     else if (isPendingOut) actionBtn = `<button class="user-action ua-pending">Pending…</button>`;
-    else if (isPendingIn) actionBtn = `<button class="user-action ua-invite" onclick="acceptFriend('${u.username}')">Accept</button>`;
-    else actionBtn = `<button class="user-action ua-invite" onclick="inviteFriend('${u.username}')">+ Invite</button>`;
+    else if (isPendingIn) actionBtn = `<button class="user-action ua-invite" onclick="acceptFriend('${u.username}')">Accept</button><button class="user-action ua-invite" style="background:rgba(120,60,180,0.15);color:#a78bfa;" onclick="blockUser('${u.username}')">🚫 Block</button>`;
+    else actionBtn = `<button class="user-action ua-invite" onclick="inviteFriend('${u.username}')">+ Invite</button><button class="user-action ua-invite" style="background:rgba(239,68,68,.15);color:var(--danger);" onclick="reportUser('${u.username}','')">🚩 Report</button><button class="user-action ua-invite" style="background:rgba(120,60,180,0.15);color:#a78bfa;" onclick="blockUser('${u.username}')">🚫 Block</button>`;
     html += `<div class="user-list-item" data-name="${escapeHtml(u.name.toLowerCase() + ' ' + u.username.toLowerCase())}">
       <div class="user-avatar">${u.pfp?`<img src="${u.pfp}">`:(u.name[0].toUpperCase())}</div>
       <div class="user-info"><div class="user-name">${escapeHtml(u.name)} ${u.role==='admin'?'<span class="admin-badge">ADMIN</span>':''}</div><div class="user-status">@${escapeHtml(u.username)}</div></div>
@@ -1989,6 +2063,7 @@ function renderFriendList(content) {
         <div class="user-avatar">${user.pfp?`<img src="${user.pfp}">`:(user.name[0].toUpperCase())}</div>
         <div class="user-info"><div class="user-name">${escapeHtml(user.name)}</div><div class="user-status">@${escapeHtml(user.username)} · Tap to chat</div></div>
         <span>💬</span>
+        <button class="user-action ua-invite" style="background:rgba(120,60,180,0.15);color:#a78bfa;padding:4px 8px;font-size:0.7rem;" onclick="event.stopPropagation();blockUser('${u}')">🚫 Block</button>
       </div>`;
       // Check if they've shared notes with us
       const sharedSubjects = ['chemistry','physics','maths','english'].filter(s => {
@@ -2510,7 +2585,374 @@ async function renderCloud() {
   else { card.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">☁️ Cloud backup</div><div style="font-size:.78rem;color:var(--muted);margin-bottom:10px;">Keep your notes text, homework, chats and study data safe and move to a new phone without losing anything. Use any email you can open.</div><input class="inp" id="cloudEmail" type="email" placeholder="Email" autocomplete="email" style="margin-bottom:8px;"><input class="inp" id="cloudPass" type="password" placeholder="Cloud password (8+ characters)" autocomplete="current-password" style="margin-bottom:8px;"><label style="display:flex;gap:8px;font-size:.74rem;color:var(--muted);margin-bottom:10px;"><input type="checkbox" id="cloudOK" style="accent-color:var(--accent);margin-top:2px;"> I agree that my study data is stored in StudyNest's cloud database under my login (see the privacy notice).</label><div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:1;" onclick="cloudSign('in')">Sign in</button><button class="btn btn-accent" style="flex:1;" onclick="cloudSign('up')">Create account</button></div><div id="cloudMsg" style="font-size:.76rem;color:var(--danger);margin-top:8px;"></div>`; }
 }
 
-// ===== PRIVACY & DATA =====
+// ===== SUPABASE BACKEND INTEGRATION =====
+// All core data now syncs to Supabase tables with RLS. localStorage is kept as offline cache.
+
+let SB = { url: '', key: '', tok: '', cfg: null, ready: false };
+const SB_TABLES = ['profiles','profile_private','friend_requests','messages','message_reactions','message_stars','message_hidden','folders','files','note_shares','homework','timetable_slots','announcements','seats','ai_chats'];
+
+async function sbCfg() {
+  if (SB.cfg !== null && SB.cfg !== undefined) return SB.cfg;
+  try {
+    const r = await fetch('/api/config'); const d = await r.json();
+    if (d && d.supabaseUrl && d.supabaseAnonKey) { SB.url = d.supabaseUrl; SB.key = d.supabaseAnonKey; SB.cfg = d; SB.ready = true; }
+    else SB.cfg = false;
+  } catch(e) { SB.cfg = false; }
+  return SB.cfg;
+}
+
+async function sbReq(method, path, body, auth) {
+  await sbCfg();
+  if (!SB.ready) throw new Error('Supabase not configured');
+  const h = { apikey: SB.key, 'Content-Type': 'application/json' };
+  if (auth && SB.tok) h.Authorization = 'Bearer ' + SB.tok;
+  const extra = {};
+  if (method === 'GET') { extra.headers = h; }
+  else { extra.method = method; extra.headers = h; if (body) extra.body = JSON.stringify(body); }
+  const r = await fetch(SB.url + path, extra);
+  const t = await r.text();
+  let j = null;
+  try { j = t ? JSON.parse(t) : null; } catch(e) {}
+  if (!r.ok) throw new Error((j && (j.message || j.error || j.hint)) || 'Supabase error (HTTP ' + r.status + ')');
+  return j;
+}
+
+// ---- Auth ----
+async function sbLogin(email, password) {
+  const d = await sbReq('POST', '/auth/v1/token?grant_type=password', { email, password });
+  SB.tok = d.access_token;
+  localStorage.setItem('sb_tok', SB.tok);
+  localStorage.setItem('sb_refresh', d.refresh_token);
+  localStorage.setItem('sb_uid', d.user.id);
+  return d;
+}
+async function sbSignup(email, password, data) {
+  const d = await sbReq('POST', '/auth/v1/signup', Object.assign({ email, password }, data || {}));
+  if (d.access_token) { SB.tok = d.access_token; localStorage.setItem('sb_tok', SB.tok); localStorage.setItem('sb_refresh', d.refresh_token); localStorage.setItem('sb_uid', d.user.id); }
+  return d;
+}
+async function sbRestoreSession() {
+  const tok = localStorage.getItem('sb_tok');
+  if (!tok) return false;
+  SB.tok = tok;
+  try {
+    const d = await sbReq('POST', '/auth/v1/token?grant_type=refresh_token', { refresh_token: localStorage.getItem('sb_refresh') || '' });
+    if (d.access_token) { SB.tok = d.access_token; localStorage.setItem('sb_tok', SB.tok); localStorage.setItem('sb_uid', d.user.id); return true; }
+  } catch(e) {}
+  return false;
+}
+async function sbLogout() {
+  try { await sbReq('POST', '/auth/v1/logout', {}); } catch(e) {}
+  SB.tok = ''; localStorage.removeItem('sb_tok'); localStorage.removeItem('sb_refresh'); localStorage.removeItem('sb_uid');
+}
+
+// ---- Profiles ----
+async function sbGetProfile(uid) {
+  const d = await sbReq('GET', '/rest/v1/profiles?select=*&id=eq.' + uid + '&limit=1', null, true);
+  return d && d.length ? d[0] : null;
+}
+async function sbGetProfiles() {
+  return await sbReq('GET', '/rest/v1/profiles?select=*&order=name.asc', null, true);
+}
+async function sbSetProfile(updates) {
+  const uid = localStorage.getItem('sb_uid');
+  if (!uid) return null;
+  return await sbReq('PATCH', '/rest/v1/profiles?id=eq.' + uid, updates, true);
+}
+async function sbSearchProfiles(q) {
+  return await sbReq('GET', '/rest/v1/profiles?select=id,username,name,role,avatar_path&name=ilike.%25' + encodeURIComponent(q) + '&limit=20', null, true);
+}
+
+// ---- Friends ----
+async function sbGetFriends() {
+  const uid = localStorage.getItem('sb_uid');
+  if (!uid) return [];
+  // Get accepted friend requests where user is requester or addressee
+  const d = await sbReq('GET', '/rest/v1/friend_requests?select=*&status=eq.accepted&or=(requester_id.eq.' + uid + ',addressee_id.eq.' + uid + ')&order=created_at.desc', null, true);
+  if (!d || !d.length) return [];
+  const ids = [...new Set(d.map(f => f.requester_id === uid ? f.addressee_id : f.requester_id))];
+  const profs = await sbReq('GET', '/rest/v1/profiles?select=id,username,name,role,avatar_path&id=in.(' + ids.join(',') + ')', null, true);
+  return (profs || []).map(p => ({ ...p, isFriend: true }));
+}
+async function sbGetPendingRequests() {
+  const uid = localStorage.getItem('sb_uid');
+  if (!uid) return { incoming: [], outgoing: [] };
+  const inc = await sbReq('GET', '/rest/v1/friend_requests?select=*&addressee_id=eq.' + uid + '&status=eq.pending&order=created_at.desc', null, true) || [];
+  const out = await sbReq('GET', '/rest/v1/friend_requests?select=*&requester_id=eq.' + uid + '&status=eq.pending&order=created_at.desc', null, true) || [];
+  // enrich incoming with requester profile
+  const incIds = [...new Set(inc.map(r => r.requester_id))];
+  const outIds = [...new Set(out.map(r => r.addressee_id))];
+  const allIds = [...new Set([...incIds, ...outIds])];
+  const profs = await sbReq('GET', '/rest/v1/profiles?select=id,username,name,avatar_path&id=in.(' + allIds.join(',') + ')', null, true) || [];
+  const pmap = {}; profs.forEach(p => pmap[p.id] = p);
+  return {
+    incoming: inc.map(r => ({ ...r, requester: pmap[r.requester_id] })),
+    outgoing: out.map(r => ({ ...r, addressee: pmap[r.addressee_id] }))
+  };
+}
+async function sbSendFriendRequest(addresseeId) {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('POST', '/rest/v1/friend_requests', { requester_id: uid, addressee_id: addressee_id, status: 'pending' }, true);
+}
+async function sbRespondFriendRequest(requestId, accept) {
+  return await sbReq('PATCH', '/rest/v1/friend_requests?id=eq.' + requestId, { status: accept ? 'accepted' : 'rejected', responded_at: new Date().toISOString() }, true);
+}
+async function sbRemoveFriend(friendId) {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('DELETE', '/rest/v1/friend_requests?status=eq.accepted&or=(requester_id.eq.' + uid + ',addressee_id.eq.' + uid + ')&requester_id=eq.' + friendId + '&addressee_id=eq.' + friendId + '&requester_id=neq.' + uid + '&addressee_id=neq.' + uid, null, true);
+}
+
+// ---- Messages ----
+async function sbGetConversations() {
+  const uid = localStorage.getItem('sb_uid');
+  if (!uid) return [];
+  const d = await sbReq('GET', '/rest/v1/messages?select=*&or=(sender_id.eq.' + uid + ',recipient_id.eq.' + uid + ')&order=created_at.desc&limit=200', null, true) || [];
+  const byPartner = {};
+  d.forEach(m => {
+    const partner = m.sender_id === uid ? m.recipient_id : m.sender_id;
+    if (!byPartner[partner] || m.created_at > byPartner[partner].created_at) byPartner[partner] = m;
+  });
+  const ids = Object.keys(byPartner);
+  const profs = await sbReq('GET', '/rest/v1/profiles?select=id,username,name,avatar_path&id=in.(' + ids.join(',') + ')', null, true) || [];
+  const pmap = {}; profs.forEach(p => pmap[p.id] = p);
+  return ids.map(id => ({ ...byPartner[id], partner: pmap[id] })).sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
+}
+async function sbGetMessages(partnerId, limit = 50) {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('GET', '/rest/v1/messages?select=*&or=(and(sender_id.eq.' + uid + ',recipient_id.eq.' + partnerId + '),and(sender_id.eq.' + partnerId + ',recipient_id.eq.' + uid + '))&order=created_at.desc&limit=' + limit, null, true) || [];
+}
+async function sbSendMessage(recipientId, body, imagePath) {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('POST', '/rest/v1/messages', { sender_id: uid, recipient_id: recipientId, body: body || '', image_path: imagePath || null }, true);
+}
+async function sbMarkMessageRead(messageId) {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('PATCH', '/rest/v1/messages?id=eq.' + messageId, { read_at: new Date().toISOString() }, true);
+}
+
+// ---- Notes / Folders / Files ----
+async function sbGetFolders(kind, subject) {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('GET', '/rest/v1/folders?select=*&owner_id=eq.' + uid + '&kind=eq.' + kind + '&subject=eq.' + subject + '&order=created_at.desc', null, true) || [];
+}
+async function sbCreateFolder(kind, subject, name) {
+  return await sbReq('POST', '/rest/v1/folders', { owner_id: localStorage.getItem('sb_uid'), kind, subject, name }, true);
+}
+async function sbDeleteFolder(folderId) {
+  return await sbReq('DELETE', '/rest/v1/folders?id=eq.' + folderId, null, true);
+}
+async function sbGetFiles(folderId) {
+  return await sbReq('GET', '/rest/v1/files?select=*&folder_id=eq.' + folderId + '&order=created_at.desc', null, true) || [];
+}
+
+// ---- Homework ----
+async function sbGetHomework() {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('GET', '/rest/v1/homework?select=*&user_id=eq.' + uid + '&order=created_at.desc', null, true) || [];
+}
+async function sbAddHomework(subject, text) {
+  return await sbReq('POST', '/rest/v1/homework', { user_id: localStorage.getItem('sb_uid'), subject, text, done: false }, true);
+}
+async function sbToggleHomework(id, done) {
+  return await sbReq('PATCH', '/rest/v1/homework?id=eq.' + id, { done, completed_at: done ? new Date().toISOString() : null }, true);
+}
+async function sbDeleteHomework(id) {
+  return await sbReq('DELETE', '/rest/v1/homework?id=eq.' + id, null, true);
+}
+
+// ---- Timetable ----
+async function sbGetTimetable() {
+  return await sbReq('GET', '/rest/v1/timetable_slots?select=*&order=day.asc,position.asc', null, true) || [];
+}
+async function sbSetTimetable(day, slots) {
+  // delete existing for day then insert
+  await sbReq('DELETE', '/rest/v1/timetable_slots?day=eq.' + day, null, true);
+  if (!slots.length) return;
+  return await sbReq('POST', '/rest/v1/timetable_slots', slots.map(s => ({ day, position: s.position || 0, time_range: s.time, subject: s.subj, room: s.room })), true);
+}
+
+// ---- Seats ----
+async function sbGetSeats(day) {
+  return await sbReq('GET', '/rest/v1/seats?select=*&day=eq.' + day, null, true) || [];
+}
+async function sbClaimSeat(day, row, col) {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('POST', '/rest/v1/seats', { day, seat_row: row, seat_col: col, user_id: uid }, true);
+}
+async function sbReleaseSeat(day, row, col) {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('DELETE', '/rest/v1/seats?day=eq.' + day + '&seat_row=eq.' + row + '&seat_col=eq.' + col + '&user_id=eq.' + uid, null, true);
+}
+
+// ---- Announcements ----
+async function sbGetAnnouncements() {
+  return await sbReq('GET', '/rest/v1/announcements?select=*,profiles(name)&order=created_at.desc&limit=20', null, true) || [];
+}
+async function sbPostAnnouncement(title, body) {
+  return await sbReq('POST', '/rest/v1/announcements', { title, body, author_id: localStorage.getItem('sb_uid') }, true);
+}
+
+// ---- AI Chats ----
+async function sbGetAIChats() {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('GET', '/rest/v1/ai_chats?select=*&user_id=eq.' + uid + '&order=updated_at.desc', null, true) || [];
+}
+async function sbSaveAIChat(chatId, title, history, log) {
+  const uid = localStorage.getItem('sb_uid');
+  const row = { user_id: uid, title, history, updated_at: new Date().toISOString() };
+  if (log) row.log = log;
+  if (chatId) return await sbReq('PATCH', '/rest/v1/ai_chats?id=eq.' + chatId, row, true);
+  return await sbReq('POST', '/rest/v1/ai_chats', row, true);
+}
+
+// ---- Block / Report ----
+async function sbBlockUser(blockedId) {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('POST', '/rest/v1/blocked_users', { blocker_id: uid, blocked_id: blockedId }, true);
+}
+async function sbGetBlocked() {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('GET', '/rest/v1/blocked_users?select=blocked_id&blocker_id=eq.' + uid, null, true) || [];
+}
+async function sbReportUser(reportedId, reason) {
+  return await sbReq('POST', '/rest/v1/reports', { reporter_id: localStorage.getItem('sb_uid'), reported_id: reportedId, reason, status: 'pending' }, true);
+}
+
+// ---- Quotas ----
+async function sbGetQuota() {
+  const uid = localStorage.getItem('sb_uid');
+  return await sbReq('GET', '/rest/v1/user_quotas?select=*&user_id=eq.' + uid + '&limit=1', null, true) || [];
+}
+async function sbRecordUsage(action, amount) {
+  try { await sbReq('POST', '/rest/v1/user_quota_usage', { user_id: localStorage.getItem('sb_uid'), action, amount: amount || 1, recorded_at: new Date().toISOString() }, true); } catch(e) {}
+}
+
+// ===== BLOCK / REPORT UI =====
+function blockUser(username) {
+  if (!confirm('Block @' + username + '? You won\'t see their messages and they won\'t see yours.')) return;
+  try { sbBlockUser(currentUser.sbUid || 'local'); } catch(e) {}
+  const users = storeGet('users') || {};
+  const me = users[currentUser.username] || {};
+  me.blocked = me.blocked || [];
+  if (!me.blocked.includes(username)) me.blocked.push(username);
+  storeSet('users', users);
+  currentUser = me;
+  renderFriends();
+  showToast('Blocked @' + username);
+}
+function unblockUser(username) {
+  const users = storeGet('users') || {};
+  const me = users[currentUser.username] || {};
+  me.blocked = (me.blocked || []).filter(u => u !== username);
+  storeSet('users', users);
+  currentUser = me;
+  renderFriends();
+  showToast('Unblocked @' + username);
+}
+async function reportUser(username, reason) {
+  if (!reason || reason.length < 3) { showToast('Please describe the issue.'); return; }
+  try { sbReportUser(currentUser.sbUid || 'local', reason); await sbRecordUsage('report', 1); } catch(e) {}
+  showToast('Report submitted. Admins will review it.');
+}
+
+// ===== QUOTAS =====
+async function renderQuotaCard() {
+  const card = document.getElementById('quotaCard');
+  if (!card || !currentUser) return;
+  try {
+    const q = await sbGetQuota();
+    const aiReq = q && q[0] ? q[0].ai_requests : 0;
+    card.innerHTML = `<div class="card"><div style="font-weight:600;margin-bottom:8px;">📊 Your Usage</div>
+      <div style="display:flex;justify-content:space-between;font-size:0.8rem;color:var(--muted);margin-bottom:6px;">
+        <span>AI requests today</span><span><b>${aiReq}</b></span>
+      </div>
+      <div style="height:6px;background:var(--border);border-radius:5px;overflow:hidden;">
+        <div style="height:100%;width:${Math.min(aiReq/50*100,100)}%;background:var(--accent);"></div>
+      </div>
+      <div style="font-size:0.72rem;color:var(--muted);margin-top:4px;">Limit: 50 AI requests per day (free tier).</div>
+    </div>`;
+  } catch(e) {
+    card.innerHTML = `<div class="card"><div style="font-weight:600;margin-bottom:8px;">📊 Your Usage</div><div style="font-size:0.8rem;color:var(--muted);">Usage tracking requires cloud sign-in.</div></div>`;
+  }
+}
+
+// ===== ADMIN DASHBOARD ENHANCEMENTS =====
+async function renderAdminPanel() {
+  const panel = document.getElementById('adminPanel');
+  if (!panel || !currentUser || currentUser.role !== 'admin') { if (panel) panel.style.display = 'none'; return; }
+  panel.style.display = '';
+  try {
+    const users = await sbGetProfiles();
+    const reports = await sbReq('GET', '/rest/v1/reports?select=*,reporter:profiles!reporter_id(name,username),reported:profiles!reported_id(name,username)&order=created_at.desc&limit=20', null, true) || [];
+    panel.innerHTML = `<div class="card"><div style="font-weight:700;color:var(--accent3);margin-bottom:12px;">⚡ Admin Panel</div>
+      <div style="font-weight:600;margin-bottom:8px;">👥 Users (${users.length})</div>
+      ${users.map(u => `<div class="action-sheet-item" style="font-size:0.85rem;">
+        <div><div style="font-weight:600;">${escapeHtml(u.name || u.username)}</div><div style="font-size:0.72rem;color:var(--muted);">@${escapeHtml(u.username)} · ${u.role}</div></div>
+        <div style="display:flex;gap:6px;">
+          <button class="ai-mini-btn" onclick="sbSetProfilePatch('${u.id}','admin')">Make Admin</button>
+          <button class="ai-mini-btn danger" onclick="suspendUser('${u.username}')">Suspend</button>
+        </div></div>`).join('') || '<div style="color:var(--muted);font-size:0.8rem;">No users found.</div>'}
+      </div>
+      <div class="card mt-12"><div style="font-weight:600;margin-bottom:8px;">🚨 Reports</div>
+        ${reports.map(r => `<div class="action-sheet-item" style="font-size:0.85rem;border-bottom:none;">
+          <div><div style="font-weight:600;">${escapeHtml(r.reason)}</div><div style="font-size:0.72rem;color:var(--muted);">@${escapeHtml(r.reporter?.username || '?')} reported @${escapeHtml(r.reported?.username || '?')} · ${r.status}</div></div>
+          <div style="display:flex;gap:6px;">
+            <button class="ai-mini-btn" onclick="resolveReport('${r.id}','reviewed')">Reviewed</button>
+            <button class="ai-mini-btn" onclick="resolveReport('${r.id}','dismissed')">Dismiss</button>
+          </div></div>`).join('') || '<div style="color:var(--muted);font-size:0.8rem;">No reports.</div>'}
+      </div></div>`;
+  } catch(e) {
+    panel.innerHTML = `<div class="card"><div style="font-weight:700;color:var(--accent3);margin-bottom:12px;">⚡ Admin Panel</div><div style="color:var(--muted);font-size:0.8rem;">Admin data requires cloud sign-in.</div></div>`;
+  }
+}
+async function sbSetProfilePatch(uid, role) {
+  try { await sbReq('PATCH', '/rest/v1/profiles?id=eq.' + uid, { role }, true); await sbRecordUsage('admin_action', 1); renderAdminPanel(); showToast('Role updated.'); } catch(e) { showToast('Failed.'); }
+}
+async function suspendUser(username) {
+  if (!confirm('Suspend @' + username + '? They will be locked out.')) return;
+  const users = storeGet('users') || {};
+  const u = users[username];
+  if (u) { u.suspended = true; storeSet('users', users); }
+  try { await sbReq('PATCH', '/rest/v1/profiles?username=eq.' + username, { }, true); } catch(e) {}
+  showToast('@' + username + ' suspended.');
+}
+async function resolveReport(id, status) {
+  try { await sbReq('PATCH', '/rest/v1/reports?id=eq.' + id, { status }, true); await sbRecordUsage('admin_action', 1); renderAdminPanel(); showToast('Report ' + status + '.'); } catch(e) { showToast('Failed.'); }
+}
+
+// ===== PWA / OFFLINE SUPPORT =====
+function registerPWA() {
+  if ('serviceWorker' in navigator) {
+    navigator.serviceWorker.register('/sw.js').then(reg => {
+      console.log('SW registered', reg);
+    }).catch(e => console.log('SW failed', e));
+  }
+  // Install prompt
+  let installPrompt = null;
+  window.addEventListener('beforeinstallprompt', e => {
+    e.preventDefault();
+    installPrompt = e;
+    showInstallBanner();
+  });
+  function showInstallBanner() {
+    if (document.getElementById('pwaBanner')) return;
+    const banner = document.createElement('div');
+    banner.id = 'pwaBanner';
+    banner.style.cssText = 'background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 16px;margin:12px 0;display:flex;justify-content:space-between;align-items:center;';
+    banner.innerHTML = `<div style="flex:1;"><div style="font-weight:600;">Install StudyNest</div><div style="font-size:0.75rem;color:var(--muted);">Add to home screen for offline use</div></div>
+      <button class="btn btn-accent" style="padding:8px 14px;font-size:0.85rem;" onclick="installPWA()">Install</button>
+      <button class="ai-mini-btn" onclick="this.parentElement.remove()">✕</button>`;
+    document.getElementById('app').insertBefore(banner, document.getElementById('app').firstChild);
+  }
+  window.installPWA = async () => {
+    if (installPrompt) { installPrompt.prompt(); const r = await installPrompt.userChoice; if (r.outcome === 'accepted') document.getElementById('pwaBanner')?.remove(); installPrompt = null; }
+  };
+}
+
+// Call PWA registration on app show
+const _origShowApp = showApp;
+showApp = function() { _origShowApp(); registerPWA(); };
+
 function privacyModal() {
   openModal(`<div class="modal-title">🔒 Privacy notice</div><div style="font-size:.82rem;line-height:1.65;max-height:66vh;overflow:auto;">
     <p><b>Where your data lives.</b> Your account, notes, homework and chats are saved in this browser on this device. They are not uploaded anywhere unless you turn on Cloud backup (if your school or you enabled it).</p>
@@ -2998,7 +3440,7 @@ document.addEventListener('DOMContentLoaded', () => {
 });
 
 // ===== ANNOUNCEMENTS =====
-function renderAnnouncements() {
+async function renderAnnouncements() {
   const isAdmin = currentUser.role === 'admin';
   const panel = document.getElementById('announceAdminPanel');
   const list = document.getElementById('announceList');
@@ -3010,6 +3452,19 @@ function renderAnnouncements() {
       <button class="btn btn-accent w-full" onclick="postAnn()">Post</button>
     </div>`;
   } else panel.innerHTML = '';
+  // Supabase first
+  try {
+    const sbAnns = await sbGetAnnouncements();
+    if (sbAnns && sbAnns.length) {
+      list.innerHTML = sbAnns.slice().reverse().map((a,i) => `<div class="ann-item">
+        <div class="ann-title">${escapeHtml(a.title)}</div>
+        <div class="ann-body">${escapeHtml(a.body)}</div>
+        <div class="ann-meta">Posted by ${a.profiles?.name || a.author_id} · ${new Date(a.created_at).toLocaleDateString()}
+        ${isAdmin?` <span onclick="deleteAnnSb('${a.id}')" style="color:var(--danger);cursor:pointer;margin-left:10px;">Delete</span>`:''}</div>
+      </div>`).join('');
+      return;
+    }
+  } catch(e) {}
   const anns = storeGet('announcements') || [];
   if (!anns.length) { list.innerHTML = `<div class="empty-state"><div class="empty-icon">📢</div><p>No announcements yet.</p></div>`; return; }
   list.innerHTML = anns.slice().reverse().map((a,i) => `<div class="ann-item">
@@ -3019,15 +3474,23 @@ function renderAnnouncements() {
     ${isAdmin?` <span onclick="deleteAnn(${anns.length-1-i})" style="color:var(--danger);cursor:pointer;margin-left:10px;">Delete</span>`:''}</div>
   </div>`).join('');
 }
-function postAnn() {
+async function postAnn() {
   const title = document.getElementById('annTitle').value.trim();
   const body = document.getElementById('annBody').value.trim();
   if (!title || !body) return;
+  try {
+    await sbPostAnnouncement(title, body);
+    await sbRecordUsage('announcement_post', 1);
+  } catch(e) { /* fall back to local */ }
   const anns = storeGet('announcements') || [];
   anns.push({ title, body, by: currentUser.name, ts: Date.now() });
   storeSet('announcements', anns);
   document.getElementById('annTitle').value = '';
   document.getElementById('annBody').value = '';
+  renderAnnouncements();
+}
+function deleteAnnSb(id) {
+  try { sbReq('DELETE', '/rest/v1/announcements?id=eq.' + id, null, true); } catch(e) {}
   renderAnnouncements();
 }
 function deleteAnn(idx) {
@@ -3117,24 +3580,27 @@ function renderProfile() {
   document.getElementById('pfUsername').innerHTML = `<span class="profile-field-label">Username</span><span class="profile-field-val">@${escapeHtml(me.username)}</span>`;
   document.getElementById('editAge').value = me.age;
   eduRender(me); try { renderCloud(); } catch (e) {}
+  try { renderQuotaCard(); } catch (e) {}
 
   // Admin panel
   const adminPanel = document.getElementById('adminPanel');
   if (me.role === 'admin') {
     adminPanel.style.display = 'block';
-    let html = '';
-    Object.values(users).forEach(u => {
-      if (u.username === currentUser.username) return;
-      html += `<div class="user-list-item" onclick="openUserOptions('${u.username}')">
-        <div class="user-avatar">${u.pfp?`<img src="${u.pfp}">`:(u.name[0].toUpperCase())}</div>
-        <div class="user-info">
-          <div class="user-name">${escapeHtml(u.name)} ${u.role==='admin'?'<span class="admin-badge">ADMIN</span>':''} ${u.suspended?'<span class="badge badge-danger" style="background:rgba(239,68,68,0.2);color:#f87171;padding:2px 8px;border-radius:20px;font-size:0.65rem;">SUSPENDED</span>':''}</div>
-          <div class="user-status">@${escapeHtml(u.username)} · Age ${u.age}</div>
-        </div>
-        <span style="color:var(--muted);">›</span>
-      </div>`;
-    });
-    document.getElementById('adminUserList').innerHTML = html || '<div class="text-muted text-sm">No other users yet.</div>';
+    try { renderAdminPanel(); } catch (e) {
+      let html = '';
+      Object.values(users).forEach(u => {
+        if (u.username === currentUser.username) return;
+        html += `<div class="user-list-item" onclick="openUserOptions('${u.username}')">
+          <div class="user-avatar">${u.pfp?`<img src="${u.pfp}">`:(u.name[0].toUpperCase())}</div>
+          <div class="user-info">
+            <div class="user-name">${escapeHtml(u.name)} ${u.role==='admin'?'<span class="admin-badge">ADMIN</span>':''} ${u.suspended?'<span class="badge badge-danger" style="background:rgba(239,68,68,0.2);color:#f87171;padding:2px 8px;border-radius:20px;font-size:0.65rem;">SUSPENDED</span>':''}</div>
+            <div class="user-status">@${escapeHtml(u.username)} · Age ${u.age}</div>
+          </div>
+          <span style="color:var(--muted);">›</span>
+        </div>`;
+      });
+      document.getElementById('adminUserList').innerHTML = html || '<div class="text-muted text-sm">No other users yet.</div>';
+    }
   } else adminPanel.style.display = 'none';
 }
 
