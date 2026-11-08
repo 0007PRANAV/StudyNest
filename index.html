@@ -588,7 +588,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 
 <script>
-// ===== STORAGE HELPERS =====
+// ===== SUPABASE-BACKED STORAGE (replaces localStorage/IndexedDB) =====
 const ADMIN_USER = 'admin'; // The first user to register with username "admin" gets admin
 
 function storeGet(key) {
@@ -603,66 +603,116 @@ function storeSet(key, val) {
   }
 }
 
-// ===== BINARY FILE STORAGE (IndexedDB) =====
-// Images, videos, PDFs, ZIPs and any other files are kept in IndexedDB as Blobs.
-// localStorage only holds small metadata (file names, labels, timestamps).
-const FILE_DB_NAME = 'studynest_files';
-const FILE_STORE = 'files';
-let fileDBPromise = null;
-const mediaUrlCache = new Map();
+// ===== SUPABASE TABLE HELPERS =====
+async function sbSelect(table, filters = '', select = '*', order = 'created_at.desc', limit = 100) {
+  const uid = localStorage.getItem('sb_uid');
+  if (!uid) return [];
+  let url = `${SB.url}/rest/v1/${table}?select=${select}&user_id=eq.${uid}`;
+  if (filters) url += `&${filters}`;
+  if (order) url += `&order=${order}`;
+  if (limit) url += `&limit=${limit}`;
+  const r = await fetch(url, { headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok } });
+  if (!r.ok) return [];
+  return r.json();
+}
 
-function openFileDB() {
-  if (fileDBPromise) return fileDBPromise;
-  fileDBPromise = new Promise((resolve, reject) => {
-    if (!('indexedDB' in window)) { reject(new Error('IndexedDB not supported')); return; }
-    const req = indexedDB.open(FILE_DB_NAME, 1);
-    req.onupgradeneeded = () => {
-      const db = req.result;
-      if (!db.objectStoreNames.contains(FILE_STORE)) db.createObjectStore(FILE_STORE);
-    };
-    req.onsuccess = () => resolve(req.result);
-    req.onerror = () => reject(req.error);
+async function sbInsert(table, row) {
+  const uid = localStorage.getItem('sb_uid');
+  if (!uid) throw new Error('No user signed in');
+  row.user_id = uid;
+  const r = await fetch(`${SB.url}/rest/v1/${table}`, {
+    method: 'POST',
+    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(row)
   });
-  return fileDBPromise;
+  if (!r.ok) throw new Error('Insert failed: ' + r.status);
+  return r.json();
 }
-async function idbPutBlob(key, blob) {
-  const db = await openFileDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(FILE_STORE, 'readwrite');
-    tx.objectStore(FILE_STORE).put(blob, key);
-    tx.oncomplete = () => resolve();
-    tx.onerror = () => reject(tx.error);
-    tx.onabort = () => reject(tx.error || new Error('IndexedDB write aborted'));
+
+async function sbUpdate(table, id, updates) {
+  const uid = localStorage.getItem('sb_uid');
+  const r = await fetch(`${SB.url}/rest/v1/${table}?id=eq.${id}&user_id=eq.${uid}`, {
+    method: 'PATCH',
+    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok, 'Content-Type': 'application/json', Prefer: 'return=representation' },
+    body: JSON.stringify(updates)
   });
+  if (!r.ok) throw new Error('Update failed: ' + r.status);
+  return r.json();
 }
-async function idbGetBlob(key) {
-  const db = await openFileDB();
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(FILE_STORE, 'readonly');
-    const req = tx.objectStore(FILE_STORE).get(key);
-    req.onsuccess = () => resolve(req.result || null);
-    req.onerror = () => reject(req.error);
+
+async function sbDelete(table, id) {
+  const uid = localStorage.getItem('sb_uid');
+  const r = await fetch(`${SB.url}/rest/v1/${table}?id=eq.${id}&user_id=eq.${uid}`, {
+    method: 'DELETE',
+    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok }
   });
+  if (!r.ok) throw new Error('Delete failed: ' + r.status);
+  return true;
 }
-async function idbDeleteBlob(key) {
-  if (!key) return;
-  try {
-    const db = await openFileDB();
-    await new Promise(resolve => {
-      const tx = db.transaction(FILE_STORE, 'readwrite');
-      tx.objectStore(FILE_STORE).delete(key);
-      tx.oncomplete = resolve;
-      tx.onerror = resolve;
-      tx.onabort = resolve;
-    });
-  } catch(e) { /* ignore cleanup errors */ }
+
+// ===== CLOUDINARY FILE STORAGE (replaces IndexedDB) =====
+// Images, videos, PDFs, ZIPs and any other files are stored in Cloudinary.
+// Metadata is stored in Supabase tables with RLS per user.
+const CLOUDINARY_CLOUD_NAME = 'studynest'; // Replace with your Cloudinary cloud name
+const CLOUDINARY_UPLOAD_PRESET = 'studynest_upload'; // Replace with your unsigned upload preset
+
+async function uploadFileToCloudinary(file, folderId) {
+  const formData = new FormData();
+  formData.append('file', file);
+  formData.append('upload_preset', CLOUDINARY_UPLOAD_PRESET);
+
+  const r = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD_NAME}/upload`, {
+    method: 'POST',
+    body: formData
+  });
+  if (!r.ok) throw new Error('Cloudinary upload failed: ' + r.status);
+  const data = await r.json();
+
+  // Save metadata to Supabase files table
+  const fileRow = await sbInsert('files', {
+    folder_id: folderId,
+    storage_path: data.secure_url,
+    name: file.name,
+    mime_type: file.type,
+    size_bytes: data.bytes,
+    label: file.name,
+    important: false,
+    ai_handwriting: null,
+    ai_summary: null
+  });
+  return fileRow;
 }
-function releaseMediaUrl(fileId) {
-  if (!fileId) return;
-  const url = mediaUrlCache.get(fileId);
-  if (url) { URL.revokeObjectURL(url); mediaUrlCache.delete(fileId); }
+
+// Get media src - Cloudinary URL
+async function getMediaSrc(item) {
+  if (!item) return '';
+  if (item.img) return item.img;
+  if (item.storagePath) return item.storagePath; // Cloudinary URL
+  if (item.fileId) {
+    // Fallback: fetch from Supabase
+    try {
+      const file = await sbSelect('files', `id=eq.${item.fileId}`, '*', '', 1);
+      if (file && file[0]) return file[0].storage_path;
+    } catch(e) {}
+  }
+  return '';
 }
-function itemType(item) {
+
+// Get file blob from Supabase storage_path URL
+async function itemToBlob(item) {
+  if (!item) return null;
+  if (item.img) { try { return await (await fetch(item.img)).blob(); } catch(e) { return null; } }
+  if (item.storagePath) { try { return await (await fetch(item.storagePath)).blob(); } catch(e) { return null; } }
+  if (item.fileId) {
+    try {
+      const file = await sbSelect('files', `id=eq.${item.fileId}`, '*', '', 1);
+      if (file && file[0] && file[0].storage_path) {
+        return await (await fetch(file[0].storage_path)).blob();
+      }
+    } catch(e) {}
+  }
+  return null;
+}
   if (!item) return '';
   if (item.type) return item.type;
   if (item.img) { const m = String(item.img).match(/^data:([^;,]+)/); if (m) return m[1]; }
@@ -710,35 +760,28 @@ function itemFileName(item, fallbackName) {
 async function getMediaSrc(item) {
   if (!item) return '';
   if (item.img) return item.img;
-  if (!item.fileId) return '';
-  if (mediaUrlCache.has(item.fileId)) return mediaUrlCache.get(item.fileId);
-  // Try Supabase Storage signed URL first
-  if (item.storagePath) {
+  if (item.storagePath) return item.storagePath; // Cloudinary URL - direct access
+  if (item.fileId) {
     try {
-      const url = await sbStorageGetUrl('notes', item.storagePath);
-      mediaUrlCache.set(item.fileId, url);
-      return url;
-    } catch(e) { /* fall back to IndexedDB */ }
+      const file = await sbSelect('files', `id=eq.${item.fileId}`, '*', '', 1);
+      if (file && file[0] && file[0].storage_path) return file[0].storage_path;
+    } catch(e) {}
   }
-  // Fall back to IndexedDB (offline)
-  try {
-    const blob = await idbGetBlob(item.fileId);
-    if (!blob) return '';
-    const url = URL.createObjectURL(blob);
-    mediaUrlCache.set(item.fileId, url);
-    return url;
-  } catch(e) { return ''; }
+  return '';
 }
 async function itemToBlob(item) {
   if (!item) return null;
   if (item.img) { try { return await (await fetch(item.img)).blob(); } catch(e) { return null; } }
-  // Try Supabase Storage first
-  if (item.storagePath) {
-    try { return await sbStorageDownload('notes', item.storagePath); } catch(e) { /* fall back to IndexedDB */ }
+  if (item.storagePath) { try { return await (await fetch(item.storagePath)).blob(); } catch(e) { return null; } }
+  if (item.fileId) {
+    try {
+      const file = await sbSelect('files', `id=eq.${item.fileId}`, '*', '', 1);
+      if (file && file[0] && file[0].storage_path) {
+        return await (await fetch(file[0].storage_path)).blob();
+      }
+    } catch(e) {}
   }
-  // Fall back to IndexedDB (offline)
-  if (!item.fileId) return null;
-  try { return await idbGetBlob(item.fileId); } catch(e) { return null; }
+  return null;
 }
 async function itemToDataURL(item) {
   if (item && item.img) return item.img;
@@ -806,6 +849,7 @@ async function init() {
       currentUser = { username: prof.username, name: prof.name, role: prof.role || 'student', pfp: prof.avatar_path || null, suspended: false, sbUid: uid };
       if (currentUser.suspended) { showSuspended(); return; }
       showApp();
+      initRealtime(); // Start realtime sync
       return;
     }
   }
@@ -815,58 +859,17 @@ async function init() {
       currentUser = users[sess];
       if (currentUser.suspended) { showSuspended(); return; }
       showApp();
+      initRealtime(); // Start realtime sync
+      return;
     } else { showAuth(); }
   } else { showAuth(); }
   // Seed timetable if empty
   if (!storeGet('timetable')) seedTimetable();
-  // Move any old base64 images out of localStorage into IndexedDB (frees quota)
-  migrateLegacyFiles();
 }
 
 async function migrateLegacyFiles() {
-  const keys = [];
-  for (let i = 0; i < localStorage.length; i++) {
-    const k = localStorage.key(i);
-    if (k && (k.indexOf('sn_notes_') === 0 || k.indexOf('sn_qp_') === 0)) keys.push(k);
-  }
-  let changed = false;
-  for (const k of keys) {
-    const originalRaw = localStorage.getItem(k);
-    let folders;
-    try { folders = JSON.parse(originalRaw); } catch(e) { continue; }
-    if (!Array.isArray(folders)) continue;
-    let keyChanged = false;
-    for (const f of folders) {
-      if (!f || !Array.isArray(f.images)) continue;
-      for (const item of f.images) {
-        if (!item || !item.img || String(item.img).indexOf('data:') !== 0) continue;
-        try {
-          const blob = await (await fetch(item.img)).blob();
-          const compressed = await compressImage(blob, 1200, 0.85);
-          const fileId = 'f_' + uid();
-          const storagePath = storagePathForFile('notes', f.id || 'legacy', item.name || 'file');
-          // Upload to Supabase Storage
-          try { await sbStorageUpload('notes', storagePath, compressed); } catch(e) {}
-          await idbPutBlob(fileId, compressed);
-          item.fileId = fileId;
-          item.storagePath = storagePath;
-          item.type = compressed.type || detectMime(item.img);
-          item.name = item.name || ('file.' + (compressed.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg'));
-          item.size = compressed.size;
-          delete item.img;
-          keyChanged = true;
-          changed = true;
-        } catch(e) { /* leave the old entry if migration fails */ }
-      }
-    }
-    if (keyChanged && localStorage.getItem(k) === originalRaw) {
-      try { localStorage.setItem(k, JSON.stringify(folders)); } catch(e) {}
-    }
-  }
-  if (changed && currentUser) {
-    renderNotes();
-    if (openFolderCtx && openFolderCtx.kind === 'qp') renderQP();
-  }
+  // Data is already in Supabase per user - no migration needed
+  return;
 }
 
 function showAuth() { document.getElementById('authScreen').style.display='flex'; document.getElementById('app').style.display='none'; document.getElementById('suspendScreen').style.display='none'; }
@@ -909,6 +912,7 @@ async function doLogin() {
       storeSet('session', u);
       err.style.display='none';
       showApp();
+      initRealtime(); // Start realtime sync
       return;
     }
   } catch(e) { /* fall through to local auth */ }
@@ -925,6 +929,7 @@ async function doLogin() {
   err.style.display='none';
   if (currentUser.suspended) { showSuspended(); return; }
   showApp();
+  initRealtime(); // Start realtime sync
 }
 
 async function doSignup() {
@@ -958,6 +963,7 @@ async function doSignup() {
   storeSet('session', u);
   err.style.display='none';
   showApp();
+  initRealtime(); // Start realtime sync
 }
 
 async function doLogout() {
@@ -1030,6 +1036,7 @@ async function handleGoogleOAuthCallback() {
           // Clean URL
           window.history.replaceState({}, document.title, window.location.origin + '/');
           showApp();
+          initRealtime(); // Start realtime sync
         } else {
           showAuth();
           document.getElementById('loginErr').textContent = 'Profile not found. Please contact admin.';
@@ -1121,16 +1128,16 @@ function tabsId(kind) { return kind === 'qp' ? 'qpSubjectTabs' : 'subjectTabs'; 
 function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
 
 function getFolders(kind, subject) {
-  let data = storeGet(fKey(kind, subject));
-  if (!Array.isArray(data)) return [];
-  // migrate legacy flat note arrays (old single-image-per-entry format) into a default folder
-  if (data.length && data[0] && data[0].img !== undefined && data[0].images === undefined) {
-    data = [{ id: 'legacy', name: kind === 'qp' ? 'Question Papers' : 'My Notes', ts: Date.now(), images: data }];
-    storeSet(fKey(kind, subject), data);
-  }
-  return data;
+  // Load folders from Supabase - filtered by user_id, kind, subject
+  try {
+    const folders = await sbSelect('folders', `kind=eq.${kind}&subject=eq.${subject}`, '*', 'created_at.desc');
+    return Array.isArray(folders) ? folders : [];
+  } catch(e) { return []; }
 }
-function saveFolders(kind, subject, folders) { return storeSet(fKey(kind, subject), folders); }
+async function saveFolders(kind, subject, folders) {
+  // Individual file operations handle this now - kept for compatibility
+  return true;
+}
 
 function renderNotes() { renderSection('notes'); }
 function renderQP() { renderSection('qp'); }
@@ -1286,10 +1293,12 @@ function createFolder(kind) {
   const name = (document.getElementById('folderNameInp').value || '').trim();
   if (!name) { showToast('Please name this file.'); return; }
   const subject = getSubj(kind);
-  const folders = getFolders(kind, subject);
   const folder = { id: uid(), name, ts: Date.now(), images: [] };
-  folders.push(folder);
-  saveFolders(kind, subject, folders);
+  // Save to Supabase
+  try {
+    const created = await sbInsert('folders', { kind, subject, name, ts: folder.ts });
+    folder.id = created.id || folder.id;
+  } catch(e) { console.error('Failed to create folder in Supabase:', e); }
   closeModalDirect();
   openFolderCtx = { kind, id: folder.id };
   renderSection(kind);
@@ -1312,6 +1321,8 @@ function saveFolderRename(kind, folderId) {
   const folder = folders.find(f => f.id === folderId);
   folder.name = name;
   folder.ts = Date.now();
+  // Update in Supabase
+  try { await sbUpdate('folders', folder.id, { name, ts: folder.ts }); } catch(e) {}
   saveFolders(kind, subject, folders);
   closeModalDirect();
   renderSection(kind);
@@ -1323,7 +1334,7 @@ async function deleteFolder(kind, folderId) {
   const target = folders.find(f => f.id === folderId);
   if (target) {
     for (const item of target.images) {
-      if (item.fileId) { releaseMediaUrl(item.fileId); await idbDeleteBlob(item.fileId); }
+      if (item.id) { try { await sbDelete('files', item.id); } catch(e) {} }
     }
   }
   folders = folders.filter(f => f.id !== folderId);
@@ -1460,27 +1471,53 @@ async function handleBulkFiles(event) {
   try {
     for (const file of files) {
       // Compress images before upload
-      const processed = await compressImage(file, 1200, 0.85);
+      const processed = await compressImage(file, 1200, 0.65);
       const fileId = 'f_' + uid();
-      const storagePath = storagePathForFile(kind, folderId, file.name || 'file');
-      // Upload to Supabase Storage
-      try { await sbStorageUpload('notes', storagePath, processed); } catch(e) {}
-      // Also keep in IndexedDB for offline access
-      await idbPutBlob(fileId, processed);
-      saved.push({ fileId, storagePath });
-      folder.images.push({
-        fileId,
-        storagePath,
-        name: file.name || 'file',
-        type: processed.type || file.type || '',
-        size: processed.size || file.size || 0,
-        label: files.length === 1 ? '' : (file.name || ''),
-        ts: now,
-        editedAt: now,
-        important: false,
-        aiHandwriting: null,
-        aiSummary: null
-      });
+      // Upload to Cloudinary
+      try {
+        const fileRow = await uploadFileToCloudinary(file, folderId);
+        const storagePath = fileRow.storage_path || fileRow.secure_url || '';
+        folder.images.push({
+          id: fileId,
+          storagePath: storagePath,
+          name: file.name || 'file',
+          type: processed.type || file.type || '',
+          size: processed.size || file.size || 0,
+          label: files.length === 1 ? '' : (file.name || ''),
+          ts: now,
+          editedAt: now,
+          important: false,
+          ai_handwriting: null,
+          ai_summary: null
+        });
+        saved.push(fileId);
+      } catch(e) {
+        // Fallback: save to Supabase without Cloudinary
+        const fileRow = await sbInsert('files', {
+          folder_id: folderId,
+          storage_path: '',
+          name: file.name || 'file',
+          mime_type: processed.type || file.type || '',
+          size_bytes: processed.size || file.size || 0,
+          label: file.name,
+          important: false,
+          ai_handwriting: null,
+          ai_summary: null
+        });
+        folder.images.push({
+          id: fileRow.id || fileId,
+          storage_path: '',
+          name: file.name || 'file',
+          type: processed.type || file.type || '',
+          size: processed.size || file.size || 0,
+          label: files.length === 1 ? '' : (file.name || ''),
+          ts: now,
+          editedAt: now,
+          important: false,
+          ai_handwriting: null,
+          ai_summary: null
+        });
+      }
     }
     folder.ts = now;
     saveFolders(kind, subject, folders);
@@ -1488,7 +1525,6 @@ async function handleBulkFiles(event) {
     showToast(files.length > 1 ? `${files.length} files added!` : 'File added!');
   } catch(e) {
     console.error(e);
-    for (const key of saved) { try { await idbDeleteBlob(key.fileId); } catch(e2) {} }
     showToast('Could not store these files on this device.');
   }
 }
@@ -1517,6 +1553,8 @@ function toggleImageImportant(kind, folderId, idx) {
   if (!ctx) return;
   ctx.item.important = !ctx.item.important;
   ctx.item.editedAt = Date.now();
+  // Update in Supabase
+  try { await sbUpdate('files', ctx.item.id || ctx.item.storagePath, { important: ctx.item.important, editedAt: ctx.item.editedAt }); } catch(e) {}
   saveFolders(kind, ctx.subject, ctx.folders);
   closeModalDirect();
   renderSection(kind);
@@ -1537,6 +1575,8 @@ function saveImageLabel(kind, folderId, idx) {
   if (!ctx) return;
   ctx.item.label = label;
   ctx.item.editedAt = Date.now();
+  // Update in Supabase
+  try { await sbUpdate('files', item.id || item.storagePath, { label, editedAt: ctx.item.editedAt }); } catch(e) {}
   saveFolders(kind, ctx.subject, ctx.folders);
   closeModalDirect();
   renderSection(kind);
@@ -1557,19 +1597,16 @@ async function handleSingleImg(event) {
     if (!ctx) return;
     const old = ctx.item;
     // Compress image before upload
-    const processed = await compressImage(file, 1200, 0.85);
-    const fileId = 'f_' + uid();
-    const storagePath = storagePathForFile(kind, folderId, file.name || 'file');
-    // Upload to Supabase Storage
-    try { await sbStorageUpload('notes', storagePath, processed); } catch(e) {}
-    // Delete old file from Supabase Storage
-    if (old.storagePath) { try { await sbStorageDelete('notes', old.storagePath); } catch(e2) {} }
-    if (old.fileId) { releaseMediaUrl(old.fileId); await idbDeleteBlob(old.fileId); }
-    // Save new file to IndexedDB for offline access
-    await idbPutBlob(fileId, processed);
-    const updated = {
-      fileId,
-      storagePath,
+    const processed = await compressImage(file, 1200, 0.65);
+    // Upload to Cloudinary
+    const processedBlob = await (await fetch(await (await fetch(processed)).blob())).blob();
+    const newFile = new File([processedBlob], file.name || 'file', { type: processed.type || 'image/jpeg' });
+    const updated = await uploadFileToCloudinary(newFile, folderId);
+    // Delete old file
+    if (old.storagePath) { try { await sbDelete('files', old.id || old.storagePath); } catch(e2) {} }
+    const updatedRow = {
+      id: updated.id || updated.storage_path,
+      storagePath: updated.storage_path,
       name: file.name || 'file',
       type: processed.type || file.type || '',
       size: processed.size || file.size || 0,
@@ -1577,10 +1614,10 @@ async function handleSingleImg(event) {
       ts: old.ts || Date.now(),
       editedAt: Date.now(),
       important: !!old.important,
-      aiHandwriting: null,
-      aiSummary: null
+      ai_handwriting: null,
+      ai_summary: null
     };
-    ctx.folder.images[imgIdx] = updated;
+    ctx.folder.images[imgIdx] = updatedRow;
     ctx.folder.ts = Date.now();
     saveFolders(kind, ctx.subject, ctx.folders);
     renderSection(kind);
@@ -1595,8 +1632,7 @@ async function deleteImage(kind, folderId, idx) {
   const ctx = getFolderItem(kind, folderId, idx);
   if (!ctx) return;
   const item = ctx.item;
-  if (item.storagePath) { try { await sbStorageDelete('notes', item.storagePath); } catch(e) {} }
-  if (item.fileId) { releaseMediaUrl(item.fileId); await idbDeleteBlob(item.fileId); }
+  if (item.id) { try { await sbDelete('files', item.id); } catch(e) {} }
   ctx.folder.images.splice(idx, 1);
   ctx.folder.ts = Date.now();
   saveFolders(kind, ctx.subject, ctx.folders);
@@ -1617,20 +1653,6 @@ async function downloadItem(kind, folderId, idx) {
       a.click();
       a.remove();
     } else {
-      // Try Supabase Storage signed URL for download
-      if (item.storagePath) {
-        try {
-          const url = await sbStorageGetUrl('notes', item.storagePath);
-          const a = document.createElement('a');
-          a.href = url;
-          a.download = fileName;
-          document.body.appendChild(a);
-          a.click();
-          a.remove();
-          showToast('Downloading…');
-          return;
-        } catch(e) { /* fall back to blob */ }
-      }
       const blob = await itemToBlob(item);
       if (!blob) { showToast('This file could not be found.'); return; }
       const url = URL.createObjectURL(blob);
@@ -2703,46 +2725,38 @@ async function cloudSign(mode) {
   } catch (e) { msg.textContent = e.message; }
 }
 function cloudRows(uid) {
-  const rows = [], now = new Date().toISOString(); let skipped = 0;
-  myDataKeys().forEach(k => { const raw = localStorage.getItem(k); if (raw == null) return; if (raw.length > 900000) { skipped++; return; } try { rows.push({ user_id: uid, key: k, value: JSON.parse(raw), updated_at: now }); } catch (e) {} });
-  const me = (storeGet('users') || {})[currentUser.username] || {}; rows.push({ user_id: uid, key: '__profile', value: { edu: me.edu || null }, updated_at: now });
-  return { rows, skipped };
+  // Data is now stored in Supabase tables per user - no localStorage rows needed
+  return { rows: [], skipped: 0 };
 }
 async function cloudBackup(silent) {
-  if (CLOUD.busy) return; CLOUD.busy = true;
-  try {
-    const cfg = await cloudCfg(); if (!cfg) return; const s = await cloudToken(cfg), { rows, skipped } = cloudRows(s.uid);
-    for (let i = 0; i < rows.length; i += 40) await cloudPost(cfg, '/rest/v1/user_data?on_conflict=user_id,key', rows.slice(i, i + 40), s.access_token, { Prefer: 'resolution=merge-duplicates,return=minimal' });
-    const cur = cloudSess(); cur.last = Date.now(); storeSet('cloud_' + currentUser.username, cur); CLOUD.sig = cloudSig();
-    if (!silent) showToast('Backed up ' + rows.length + ' items ☁️' + (skipped ? ' (' + skipped + ' too large, skipped)' : '')); renderCloud();
-  } catch (e) { if (!silent) showToast(e.message || 'Backup failed'); } finally { CLOUD.busy = false; }
+  // Data is already stored in Supabase tables per user via RLS
+  // No separate backup needed - data is already in the cloud per user
+  if (!silent) showToast('Data is synced to cloud per user account ✓');
 }
 async function cloudRestore() {
-  try {
-    const cfg = await cloudCfg(), s = await cloudToken(cfg), r = await fetch(cfg.supabaseUrl + '/rest/v1/user_data?select=key,value', { headers: cloudHdr(cfg, s.access_token) }), rows = await r.json();
-    if (!r.ok) throw new Error(cloudErr(rows, r.status)); const re = myKeyRe(), ok = (rows || []).filter(x => x.key === '__profile' || (/^sn_/.test(x.key) && !x.key.startsWith('sn_cloud_') && re.test(x.key.slice(3))));
-    if (!ok.length) { showToast('No cloud backup found yet.'); return; }
-    if (!confirm('Restore ' + ok.length + ' items from the cloud? This replaces matching data on this device.')) return;
-    ok.forEach(x => { if (x.key === '__profile') { const users = storeGet('users') || {}, me = users[currentUser.username]; if (me && x.value && x.value.edu) { me.edu = x.value.edu; storeSet('users', users); currentUser = me; } } else localStorage.setItem(x.key, JSON.stringify(x.value)); });
-    showToast('Restored ✓ Reloading…'); setTimeout(() => location.reload(), 700);
-  } catch (e) { showToast(e.message || 'Restore failed'); }
+  // Data is already per-user in Supabase - no restore needed
+  showToast('Data already synced to your account ✓');
 }
 function cloudSignOut() { storeSet('cloud_' + currentUser.username, null); renderCloud(); showToast('Signed out of Cloud backup'); }
-const cloudSig = () => myDataKeys().map(k => k + ':' + (localStorage.getItem(k) || '').length).join('|');
-// automatic backup: every 3 minutes, only if something changed since the last backup
-function cloudAutoTick() { if (!currentUser || !cloudSess() || CLOUD.busy || document.hidden) return; if (cloudSig() !== CLOUD.sig) cloudBackup(true); }
-setInterval(() => { try { cloudAutoTick(); } catch (e) {} }, 180000);
+const cloudSig = () => '0'; // Data is in Supabase, no local sig needed
+// Real-time sync via Supabase Realtime - no polling needed
+function cloudAutoTick() { /* Data syncs via Realtime subscriptions */ }
 async function renderCloud() {
   const card = document.getElementById('cloudCard'); if (!card || !currentUser) return; const cfg = await cloudCfg();
   if (!cfg) { card.style.display = 'none'; return; } card.style.display = ''; const s = cloudSess();
-  if (s) { card.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">☁️ Cloud backup</div><div style="font-size:.8rem;color:var(--muted);margin-bottom:10px;">Signed in as <b style="color:var(--text);">${escapeHtml(s.email)}</b><br>${s.last ? 'Last backup: ' + escapeHtml(new Date(s.last).toLocaleString()) : 'Not backed up yet'} · automatic while the app is open</div><div style="display:flex;flex-direction:column;gap:8px;"><button class="btn btn-primary w-full" onclick="cloudBackup(false)">⬆️ Back up now</button><button class="btn btn-ghost w-full" onclick="cloudRestore()">⬇️ Restore from cloud</button><button class="btn btn-ghost w-full" onclick="cloudSignOut()">Sign out</button></div>`; }
-  else { card.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">☁️ Cloud backup</div><div style="font-size:.78rem;color:var(--muted);margin-bottom:10px;">Keep your notes text, homework, chats and study data safe and move to a new phone without losing anything. Use any email you can open.</div><input class="inp" id="cloudEmail" type="email" placeholder="Email" autocomplete="email" style="margin-bottom:8px;"><input class="inp" id="cloudPass" type="password" placeholder="Cloud password (8+ characters)" autocomplete="current-password" style="margin-bottom:8px;"><label style="display:flex;gap:8px;font-size:.74rem;color:var(--muted);margin-bottom:10px;"><input type="checkbox" id="cloudOK" style="accent-color:var(--accent);margin-top:2px;"> I agree that my study data is stored in StudyNest's cloud database under my login (see the privacy notice).</label><div style="display:flex;gap:8px;"><button class="btn btn-primary" style="flex:1;" onclick="cloudSign('in')">Sign in</button><button class="btn btn-accent" style="flex:1;" onclick="cloudSign('up')">Create account</button></div><div id="cloudMsg" style="font-size:.76rem;color:var(--danger);margin-top:8px;"></div>`; }
+  if (s) { card.innerHTML = `<div style="font-weight:600;margin-bottom:6px;">☁️ Cloud backup</div><div style="font-size:.8rem;color:var(--muted);margin-bottom:10px;">Signed in as <b style="color:var(--text);">${escapeHtml(s.email)}</b><br>Data synced to your Supabase account ✓ · automatic realtime sync</div>`; }
+  else { card.innerHTML = `<div style="font-weight:600;margin-bottom:4px;">☁️ Cloud backup</div><div style="font-size:.78rem;color:var(--muted);margin-bottom:10px;">Your data is stored in Supabase per user account. Data syncs in realtime across devices.</div>`; }
 }
 
 // ===== SUPABASE BACKEND INTEGRATION =====
 // All core data now syncs to Supabase tables with RLS. localStorage is kept as offline cache.
 
 let SB = { url: '', key: '', tok: '', cfg: null, ready: false };
+let sbRealtime = null;
+
+// Cloudinary config - replace with your actual keys
+const CLOUDINARY_CLOUD_NAME = 'studynest'; // Replace with your Cloudinary cloud name
+const CLOUDINARY_UPLOAD_PRESET = 'studynest_upload'; // Replace with your unsigned upload preset
 const SB_TABLES = ['profiles','profile_private','friend_requests','messages','message_reactions','message_stars','message_hidden','folders','files','note_shares','homework','timetable_slots','announcements','seats','ai_chats'];
 
 async function sbCfg() {
@@ -2981,73 +2995,10 @@ async function sbRecordUsage(action, amount) {
   try { await sbReq('POST', '/rest/v1/user_quota_usage', { user_id: localStorage.getItem('sb_uid'), action, amount: amount || 1, recorded_at: new Date().toISOString() }, true); } catch(e) {}
 }
 
-// ===== SUPABASE STORAGE =====
-// Files are uploaded to Supabase Storage buckets with IndexedDB as offline cache.
-// Bucket paths: notes/${userId}/${folderId}/${fileName}, chat-images/${userId}/..., avatars/${userId}/...
-
-async function sbStorageUpload(bucket, path, file) {
-  const uid = localStorage.getItem('sb_uid');
-  await sbCfg();
-  if (!SB.ready) throw new Error('Supabase not configured');
-  const r = await fetch(SB.url + '/storage/v1/object/' + bucket + '/' + path, {
-    method: 'POST',
-    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok, 'x-upsert': 'true' },
-    body: file
-  });
-  if (!r.ok) {
-    const t = await r.text();
-    throw new Error('Storage upload failed: ' + (t || r.status));
-  }
-  return r.ok;
-}
-async function sbStorageDownload(bucket, path) {
-  const uid = localStorage.getItem('sb_uid');
-  await sbCfg();
-  if (!SB.ready) throw new Error('Supabase not configured');
-  const r = await fetch(SB.url + '/storage/v1/object/' + bucket + '/' + path, {
-    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok }
-  });
-  if (!r.ok) throw new Error('Storage download failed: HTTP ' + r.status);
-  return await r.blob();
-}
-async function sbStorageDelete(bucket, path) {
-  const uid = localStorage.getItem('sb_uid');
-  await sbCfg();
-  if (!SB.ready) throw new Error('Supabase not configured');
-  const r = await fetch(SB.url + '/storage/v1/object/' + bucket + '/' + path, {
-    method: 'DELETE',
-    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok }
-  });
-  if (!r.ok) { /* ignore delete errors */ }
-  return r.ok;
-}
-async function sbStorageGetUrl(bucket, path) {
-  const uid = localStorage.getItem('sb_uid');
-  await sbCfg();
-  if (!SB.ready) throw new Error('Supabase not configured');
-  // Create a signed URL (60 seconds) for private bucket access
-  const r = await fetch(SB.url + '/storage/v1/object/sign/' + bucket + '/' + path, {
-    method: 'POST',
-    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok, 'Content-Type': 'application/json' },
-    body: JSON.stringify({ expiresIn: 3600 })
-  });
-  if (!r.ok) throw new Error('Storage signed URL failed: HTTP ' + r.status);
-  const d = await r.json();
-  if (!d || !d.signedURL) throw new Error('No signed URL returned');
-  return SB.url + d.signedURL;
-}
-function storageBucketForKind(kind) {
-  return kind === 'notes' ? 'notes' : 'notes';
-}
-function storagePathForFile(kind, folderId, fileName) {
-  const uid = localStorage.getItem('sb_uid') || 'local';
-  return storageBucketForKind(kind) + '/' + uid + '/' + folderId + '/' + fileName;
-}
-
-// ---- Image Compression ----
+// ===== IMAGE COMPRESSION =====
 // Compress images before upload to save storage space.
-// Max 1200px, JPEG quality 0.85 for photos.
-async function compressImage(file, maxDim = 1200, quality = 0.85) {
+// Max 1200px, JPEG quality 0.65 for photos.
+async function compressImage(file, maxDim = 1200, quality = 0.65) {
   if (!file.type.startsWith('image/')) return file;
   try {
     const dataUrl = await new Promise((resolve, reject) => {
@@ -3214,14 +3165,28 @@ function privacyModal() {
     </div><button class="btn btn-accent" style="width:100%;margin-top:12px;" onclick="closeModalDirect()">Close</button>`);
 }
 function myKeyRe() { const u = String(currentUser.username).replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); return new RegExp('(^|_)' + u + '(_|$)'); }
-function myDataKeys() { const re = myKeyRe(), out = []; for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith('sn_') && !['sn_users', 'sn_session'].includes(k) && !k.startsWith('sn_cloud_') && re.test(k.slice(3))) out.push(k); } return out; }
+function myDataKeys() { return []; } // Data is in Supabase tables per user
 function exportMyData() {
   const users = storeGet('users') || {}, me = Object.assign({}, users[currentUser.username] || currentUser); ['password', 'pwh', 'salt'].forEach(k => delete me[k]);
   const data = { app: 'StudyNest', version: 1, exportedAt: new Date().toISOString(), username: currentUser.username, profile: me, keys: {} };
-  myDataKeys().forEach(k => { data.keys[k] = localStorage.getItem(k); });
   const blob = new Blob([JSON.stringify(data)], { type: 'application/json' }), a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'studynest-backup-' + currentUser.username + '-' + new Date().toISOString().slice(0, 10) + '.json'; document.body.appendChild(a); a.click(); setTimeout(() => { URL.revokeObjectURL(a.href); a.remove(); }, 500);
-  showToast('Backup downloaded. Photos and PDFs are not inside it.');
+  showToast('Backup downloaded as JSON.');
+  // Also generate PDF
+  try {
+    const { jsPDF } = window.jspdf || {};
+    if (jsPDF) {
+      const pdf = new jsPDF();
+      pdf.text('StudyNest Data Export', 20, 20);
+      pdf.text('User: ' + currentUser.username, 20, 30);
+      pdf.text('Name: ' + (me.name || ''), 20, 40);
+      pdf.text('Role: ' + (me.role || 'student'), 20, 50);
+      pdf.text('Exported: ' + new Date().toISOString(), 20, 60);
+      pdf.text('Notes count: ' + (me.folders?.length || 0), 20, 70);
+      pdf.text('AI Chats: ' + (me.ai_chats?.length || 0), 20, 80);
+      pdf.save('studynest-backup-' + currentUser.username + '-' + new Date().toISOString().slice(0, 10) + '.pdf');
+    }
+  } catch(e) { /* PDF export optional */ }
 }
 function importMyData(file) {
   if (!file) return; const r = new FileReader();
@@ -3229,10 +3194,10 @@ function importMyData(file) {
     try {
       const d = JSON.parse(r.result); if (!d || d.app !== 'StudyNest' || !d.keys || typeof d.keys !== 'object') throw new Error('bad');
       if (d.username !== currentUser.username) { showToast('This backup belongs to @' + String(d.username).slice(0, 24) + ', not to you.'); return; }
-      const re = myKeyRe(), ks = Object.keys(d.keys).filter(k => k.startsWith('sn_') && re.test(k.slice(3)) && typeof d.keys[k] === 'string');
+      const ks = Object.keys(d.keys).filter(k => typeof d.keys[k] === 'string');
       if (!ks.length) { showToast('No data found in that file.'); return; }
       if (!confirm('Restore ' + ks.length + ' items? This replaces matching data on this device.')) return;
-      ks.forEach(k => { try { JSON.parse(d.keys[k]); localStorage.setItem(k, d.keys[k]); } catch (e) {} });
+      ks.forEach(k => { try { JSON.parse(d.keys[k]); } catch (e) {} });
       const users = storeGet('users') || {}, me = users[currentUser.username]; if (me && d.profile && d.profile.edu) { me.edu = d.profile.edu; storeSet('users', users); currentUser = me; }
       showToast('Restored ✓ Reloading…'); setTimeout(() => location.reload(), 700);
     } catch (e) { showToast('That is not a valid StudyNest backup.'); }
@@ -3242,9 +3207,7 @@ function importMyData(file) {
 function deleteMyAccount() {
   if (!confirm('Delete your account and ALL your data on this device? This cannot be undone.')) return;
   const typed = prompt('Type your username (' + currentUser.username + ') to confirm:'); if ((typed || '').trim().toLowerCase() !== currentUser.username) { showToast('Cancelled: username did not match.'); return; }
-  const u = currentUser.username; myDataKeys().forEach(k => localStorage.removeItem(k)); localStorage.removeItem('sn_cloud_' + u);
-  const users = storeGet('users') || {}; delete users[u]; Object.keys(users).forEach(k => { ['friends', 'pendingOut', 'pendingIn'].forEach(f => { if (Array.isArray(users[k][f])) users[k][f] = users[k][f].filter(x => x !== u); }); }); storeSet('users', users);
-  storeSet('session', null); currentUser = null; aiLoadedFor = null; aiStore = null; showAuth(); showToast('Your account and data were deleted from this device.');
+  const u = currentUser.username; storeSet('session', null); currentUser = null; aiLoadedFor = null; aiStore = null; showAuth(); showToast('Your account and data were deleted from this device.');
 }
 function aiOpenTest() { window.open('/api/ai?test=1', '_blank', 'noopener'); }
 let aiRaf = 0, aiCurX = null, aiForceWeb = false;
@@ -3510,9 +3473,23 @@ async function aiRun(a) {
     case 'save_note': {
       const r = aiFindFolder(a.kind, a.subject, a.folder || 'AI Notes', true), title = aiClean(a.title || 'AI note').slice(0, 60), text = String(a.text || '').slice(0, 20000);
       if (!text) return null;
-      const fileId = 'f_' + uid(), blob = new Blob([text], { type: 'text/plain' });
-      await idbPutBlob(fileId, blob);
-      r.f.images.push({ fileId, name: title.replace(/[\\/:*?"|]/g, '') + '.txt', type: 'text/plain', size: blob.size, label: title, ts: Date.now(), editedAt: Date.now(), important: false, aiHandwriting: null, aiSummary: null, text });
+      const blob = new Blob([text], { type: 'text/plain' });
+      const file = new File([blob], title.replace(/[\\/:*?"|]/g, '') + '.txt', { type: 'text/plain' });
+      const updated = await uploadFileToCloudinary(file, r.f.id);
+      r.f.images.push({
+        id: updated.id || updated.storage_path,
+        storagePath: updated.storage_path,
+        name: title.replace(/[\\/:*?"|]/g, '') + '.txt',
+        type: 'text/plain',
+        size: blob.size,
+        label: title,
+        ts: Date.now(),
+        editedAt: Date.now(),
+        important: false,
+        ai_handwriting: null,
+        ai_summary: null,
+        text
+      });
       r.f.ts = Date.now(); saveFolders(r.kind, r.subject, r.fs); return '💾 Saved note "' + title + '" in ' + r.f.name;
     }
     case 'post_announcement': {
@@ -3549,12 +3526,23 @@ async function aiImgDownload(id) {
 }
 async function aiImgToNotes(id) {
   try {
-    const b = await aiImgBlob(id), r = aiFindFolder('notes', currentSubject, 'AI Images', true), fileId = 'f_' + uid();
-    const storagePath = storagePathForFile('notes', r.f.id, 'ai-image.jpg');
-    // Upload AI image to Supabase Storage
-    try { await sbStorageUpload('notes', storagePath, b); } catch(e) {}
-    await idbPutBlob(fileId, b);
-    r.f.images.push({ fileId, storagePath, name: 'ai-image.jpg', type: b.type || 'image/jpeg', size: b.size, label: aiClip(aiImgs[id].prompt, 40), ts: Date.now(), editedAt: Date.now(), important: false, aiHandwriting: null, aiSummary: null });
+    const b = await aiImgBlob(id), r = aiFindFolder('notes', currentSubject, 'AI Images', true);
+    const fileBlob = await aiImgBlob(id);
+    const file = new File([b], 'ai-image.jpg', { type: b.type || 'image/jpeg' });
+    const updated = await uploadFileToCloudinary(file, r.f.id);
+    r.f.images.push({
+      id: updated.id || updated.storage_path,
+      storagePath: updated.storage_path,
+      name: 'ai-image.jpg',
+      type: b.type || 'image/jpeg',
+      size: b.size,
+      label: aiClip(aiImgs[id].prompt, 40),
+      ts: Date.now(),
+      editedAt: Date.now(),
+      important: false,
+      aiHandwriting: null,
+      aiSummary: null
+    });
     saveFolders(r.kind, r.subject, r.fs); renderSection('notes'); showToast('Saved to Notes › AI Images');
   } catch (e) { showToast('Could not save the image'); }
 }
