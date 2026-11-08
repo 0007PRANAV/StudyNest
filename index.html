@@ -703,6 +703,15 @@ async function getMediaSrc(item) {
   if (item.img) return item.img;
   if (!item.fileId) return '';
   if (mediaUrlCache.has(item.fileId)) return mediaUrlCache.get(item.fileId);
+  // Try Supabase Storage signed URL first
+  if (item.storagePath) {
+    try {
+      const url = await sbStorageGetUrl('notes', item.storagePath);
+      mediaUrlCache.set(item.fileId, url);
+      return url;
+    } catch(e) { /* fall back to IndexedDB */ }
+  }
+  // Fall back to IndexedDB (offline)
   try {
     const blob = await idbGetBlob(item.fileId);
     if (!blob) return '';
@@ -714,6 +723,11 @@ async function getMediaSrc(item) {
 async function itemToBlob(item) {
   if (!item) return null;
   if (item.img) { try { return await (await fetch(item.img)).blob(); } catch(e) { return null; } }
+  // Try Supabase Storage first
+  if (item.storagePath) {
+    try { return await sbStorageDownload('notes', item.storagePath); } catch(e) { /* fall back to IndexedDB */ }
+  }
+  // Fall back to IndexedDB (offline)
   if (!item.fileId) return null;
   try { return await idbGetBlob(item.fileId); } catch(e) { return null; }
 }
@@ -815,12 +829,17 @@ async function migrateLegacyFiles() {
         if (!item || !item.img || String(item.img).indexOf('data:') !== 0) continue;
         try {
           const blob = await (await fetch(item.img)).blob();
+          const compressed = await compressImage(blob, 1200, 0.85);
           const fileId = 'f_' + uid();
-          await idbPutBlob(fileId, blob);
+          const storagePath = storagePathForFile('notes', f.id || 'legacy', item.name || 'file');
+          // Upload to Supabase Storage
+          try { await sbStorageUpload('notes', storagePath, compressed); } catch(e) {}
+          await idbPutBlob(fileId, compressed);
           item.fileId = fileId;
-          item.type = blob.type || detectMime(item.img);
-          item.name = item.name || ('file.' + (item.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg'));
-          item.size = blob.size;
+          item.storagePath = storagePath;
+          item.type = compressed.type || detectMime(item.img);
+          item.name = item.name || ('file.' + (compressed.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg'));
+          item.size = compressed.size;
           delete item.img;
           keyChanged = true;
           changed = true;
@@ -1336,14 +1355,21 @@ async function handleBulkFiles(event) {
   const saved = [];
   try {
     for (const file of files) {
+      // Compress images before upload
+      const processed = await compressImage(file, 1200, 0.85);
       const fileId = 'f_' + uid();
-      await idbPutBlob(fileId, file);
-      saved.push(fileId);
+      const storagePath = storagePathForFile(kind, folderId, file.name || 'file');
+      // Upload to Supabase Storage
+      try { await sbStorageUpload('notes', storagePath, processed); } catch(e) {}
+      // Also keep in IndexedDB for offline access
+      await idbPutBlob(fileId, processed);
+      saved.push({ fileId, storagePath });
       folder.images.push({
         fileId,
+        storagePath,
         name: file.name || 'file',
-        type: file.type || '',
-        size: file.size || 0,
+        type: processed.type || file.type || '',
+        size: processed.size || file.size || 0,
         label: files.length === 1 ? '' : (file.name || ''),
         ts: now,
         editedAt: now,
@@ -1358,7 +1384,7 @@ async function handleBulkFiles(event) {
     showToast(files.length > 1 ? `${files.length} files added!` : 'File added!');
   } catch(e) {
     console.error(e);
-    for (const key of saved) await idbDeleteBlob(key);
+    for (const key of saved) { try { await idbDeleteBlob(key.fileId); } catch(e2) {} }
     showToast('Could not store these files on this device.');
   }
 }
@@ -1426,14 +1452,23 @@ async function handleSingleImg(event) {
     const ctx = getFolderItem(kind, folderId, imgIdx);
     if (!ctx) return;
     const old = ctx.item;
+    // Compress image before upload
+    const processed = await compressImage(file, 1200, 0.85);
     const fileId = 'f_' + uid();
-    await idbPutBlob(fileId, file);
+    const storagePath = storagePathForFile(kind, folderId, file.name || 'file');
+    // Upload to Supabase Storage
+    try { await sbStorageUpload('notes', storagePath, processed); } catch(e) {}
+    // Delete old file from Supabase Storage
+    if (old.storagePath) { try { await sbStorageDelete('notes', old.storagePath); } catch(e2) {} }
     if (old.fileId) { releaseMediaUrl(old.fileId); await idbDeleteBlob(old.fileId); }
+    // Save new file to IndexedDB for offline access
+    await idbPutBlob(fileId, processed);
     const updated = {
       fileId,
+      storagePath,
       name: file.name || 'file',
-      type: file.type || '',
-      size: file.size || 0,
+      type: processed.type || file.type || '',
+      size: processed.size || file.size || 0,
       label: old.label || '',
       ts: old.ts || Date.now(),
       editedAt: Date.now(),
@@ -1456,6 +1491,7 @@ async function deleteImage(kind, folderId, idx) {
   const ctx = getFolderItem(kind, folderId, idx);
   if (!ctx) return;
   const item = ctx.item;
+  if (item.storagePath) { try { await sbStorageDelete('notes', item.storagePath); } catch(e) {} }
   if (item.fileId) { releaseMediaUrl(item.fileId); await idbDeleteBlob(item.fileId); }
   ctx.folder.images.splice(idx, 1);
   ctx.folder.ts = Date.now();
@@ -1477,6 +1513,20 @@ async function downloadItem(kind, folderId, idx) {
       a.click();
       a.remove();
     } else {
+      // Try Supabase Storage signed URL for download
+      if (item.storagePath) {
+        try {
+          const url = await sbStorageGetUrl('notes', item.storagePath);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = fileName;
+          document.body.appendChild(a);
+          a.click();
+          a.remove();
+          showToast('Downloading…');
+          return;
+        } catch(e) { /* fall back to blob */ }
+      }
       const blob = await itemToBlob(item);
       if (!blob) { showToast('This file could not be found.'); return; }
       const url = URL.createObjectURL(blob);
@@ -2827,6 +2877,101 @@ async function sbRecordUsage(action, amount) {
   try { await sbReq('POST', '/rest/v1/user_quota_usage', { user_id: localStorage.getItem('sb_uid'), action, amount: amount || 1, recorded_at: new Date().toISOString() }, true); } catch(e) {}
 }
 
+// ===== SUPABASE STORAGE =====
+// Files are uploaded to Supabase Storage buckets with IndexedDB as offline cache.
+// Bucket paths: notes/${userId}/${folderId}/${fileName}, chat-images/${userId}/..., avatars/${userId}/...
+
+async function sbStorageUpload(bucket, path, file) {
+  const uid = localStorage.getItem('sb_uid');
+  await sbCfg();
+  if (!SB.ready) throw new Error('Supabase not configured');
+  const r = await fetch(SB.url + '/storage/v1/object/' + bucket + '/' + path, {
+    method: 'POST',
+    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok, 'x-upsert': 'true' },
+    body: file
+  });
+  if (!r.ok) {
+    const t = await r.text();
+    throw new Error('Storage upload failed: ' + (t || r.status));
+  }
+  return r.ok;
+}
+async function sbStorageDownload(bucket, path) {
+  const uid = localStorage.getItem('sb_uid');
+  await sbCfg();
+  if (!SB.ready) throw new Error('Supabase not configured');
+  const r = await fetch(SB.url + '/storage/v1/object/' + bucket + '/' + path, {
+    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok }
+  });
+  if (!r.ok) throw new Error('Storage download failed: HTTP ' + r.status);
+  return await r.blob();
+}
+async function sbStorageDelete(bucket, path) {
+  const uid = localStorage.getItem('sb_uid');
+  await sbCfg();
+  if (!SB.ready) throw new Error('Supabase not configured');
+  const r = await fetch(SB.url + '/storage/v1/object/' + bucket + '/' + path, {
+    method: 'DELETE',
+    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok }
+  });
+  if (!r.ok) { /* ignore delete errors */ }
+  return r.ok;
+}
+async function sbStorageGetUrl(bucket, path) {
+  const uid = localStorage.getItem('sb_uid');
+  await sbCfg();
+  if (!SB.ready) throw new Error('Supabase not configured');
+  // Create a signed URL (60 seconds) for private bucket access
+  const r = await fetch(SB.url + '/storage/v1/object/sign/' + bucket + '/' + path, {
+    method: 'POST',
+    headers: { apikey: SB.key, Authorization: 'Bearer ' + SB.tok, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ expiresIn: 3600 })
+  });
+  if (!r.ok) throw new Error('Storage signed URL failed: HTTP ' + r.status);
+  const d = await r.json();
+  if (!d || !d.signedURL) throw new Error('No signed URL returned');
+  return SB.url + d.signedURL;
+}
+function storageBucketForKind(kind) {
+  return kind === 'notes' ? 'notes' : 'notes';
+}
+function storagePathForFile(kind, folderId, fileName) {
+  const uid = localStorage.getItem('sb_uid') || 'local';
+  return storageBucketForKind(kind) + '/' + uid + '/' + folderId + '/' + fileName;
+}
+
+// ---- Image Compression ----
+// Compress images before upload to save storage space.
+// Max 1200px, JPEG quality 0.85 for photos.
+async function compressImage(file, maxDim = 1200, quality = 0.85) {
+  if (!file.type.startsWith('image/')) return file;
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onload = e => resolve(e.target.result);
+      reader.onerror = reject;
+      reader.readAsDataURL(file);
+    });
+    const img = new Image();
+    img.src = dataUrl;
+    await new Promise(resolve => { img.onload = resolve; img.onerror = resolve; });
+    const w = img.naturalWidth || img.width;
+    const h = img.naturalHeight || img.height;
+    if (w <= maxDim && h <= maxDim && file.size < 500000) return file; // already small enough
+    const scale = Math.min(maxDim / w, maxDim / h, 1);
+    const cw = Math.max(1, Math.round(w * scale));
+    const ch = Math.max(1, Math.round(h * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = cw; canvas.height = ch;
+    const ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, cw, ch);
+    ctx.drawImage(img, 0, 0, cw, ch);
+    const compressed = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg', quality));
+    return compressed || file;
+  } catch(e) { return file; }
+}
+
 // ===== BLOCK / REPORT UI =====
 function blockUser(username) {
   if (!confirm('Block @' + username + '? You won\'t see their messages and they won\'t see yours.')) return;
@@ -3301,8 +3446,11 @@ async function aiImgDownload(id) {
 async function aiImgToNotes(id) {
   try {
     const b = await aiImgBlob(id), r = aiFindFolder('notes', currentSubject, 'AI Images', true), fileId = 'f_' + uid();
+    const storagePath = storagePathForFile('notes', r.f.id, 'ai-image.jpg');
+    // Upload AI image to Supabase Storage
+    try { await sbStorageUpload('notes', storagePath, b); } catch(e) {}
     await idbPutBlob(fileId, b);
-    r.f.images.push({ fileId, name: 'ai-image.jpg', type: b.type || 'image/jpeg', size: b.size, label: aiClip(aiImgs[id].prompt, 40), ts: Date.now(), editedAt: Date.now(), important: false, aiHandwriting: null, aiSummary: null });
+    r.f.images.push({ fileId, storagePath, name: 'ai-image.jpg', type: b.type || 'image/jpeg', size: b.size, label: aiClip(aiImgs[id].prompt, 40), ts: Date.now(), editedAt: Date.now(), important: false, aiHandwriting: null, aiSummary: null });
     saveFolders(r.kind, r.subject, r.fs); renderSection('notes'); showToast('Saved to Notes › AI Images');
   } catch (e) { showToast('Could not save the image'); }
 }
