@@ -11,7 +11,22 @@ A mobile-first study companion with notes, question papers, timetables, homework
 
 ## Storage
 
-Uploaded photos, videos, PDFs, ZIPs and other files are stored as Blobs in IndexedDB on the user's device. Only small metadata (names, labels, timestamps) is kept in localStorage. This avoids the ~5 MB localStorage limit that previously caused uploads to disappear.
+Uploaded photos, videos, PDFs, ZIPs and other files are stored as Blobs in IndexedDB on the user's device. Only small metadata (names, labels, timestamps) is kept in localStorage. Images are compressed to JPEG at quality 0.7 and 1100 px before saving. This avoids the ~5 MB localStorage limit that previously caused uploads to disappear.
+
+## Accounts and cloud sync
+
+Signing in uses Supabase Auth. Each account's per-user keys (`notes_*`, `qp_*`, `hw_*`, `aichats_*`, `plan_*`, `profile_*`, etc.) are mirrored to the `public.user_data` table, so the same account shows the same notes, homework and AI history in every tab and on every device. localStorage remains an offline cache.
+
+- The app polls the cloud every 25 seconds while the tab is visible, and pushes local edits after a short debounce.
+- Role and suspension flags always come from `public.profiles`, never from the cache.
+- Passwords and session tokens are never synced.
+- "Download my data" produces a complete JSON backup plus a readable PDF summary.
+
+### Login notes
+
+- You can sign in with a username (`pranav`) or the full email used at signup (`name@gmail.com`).
+- If a username is shared by two accounts, use the full email so the app signs you into the right one.
+- The admin dashboard is available at `/admin` on the main site and in the separate `StudyNest-ADMIN` repo.
 
 ## AI setup (required)
 
