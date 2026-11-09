@@ -14,11 +14,13 @@
 
     /* Layout */
     .app { display: flex; height: 100vh; overflow: hidden; }
-    .sidebar { width: 260px; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; z-index: 100; }
-    .sidebar-header { padding: 20px; border-bottom: 1px solid #30363d; }
-    .sidebar-brand { font-size: 1.25rem; font-weight: 800; color: #00f5c8; letter-spacing: -0.5px; }
+    .sidebar { width: 260px; flex-shrink: 0; background: #161b22; border-right: 1px solid #30363d; display: flex; flex-direction: column; z-index: 100; transition: margin-left 0.25s ease, transform 0.25s ease; }
+    .sidebar-header { padding: 20px; border-bottom: 1px solid #30363d; display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+    .sidebar-brand { font-size: 1.15rem; font-weight: 800; color: #00f5c8; letter-spacing: -0.5px; }
+    .sidebar-close { display: none; background: none; border: none; color: #8b949e; font-size: 1.3rem; line-height: 1; padding: 4px 6px; border-radius: 6px; }
+    .sidebar-close:hover { color: #e6edf3; background: #21262d; }
     .sidebar-nav { flex: 1; overflow-y: auto; padding: 12px 0; }
-    .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: #8b949e; font-size: 0.9rem; border-radius: 8px; margin: 0 10px; cursor: pointer; transition: all 0.2s; }
+    .nav-item { display: flex; align-items: center; gap: 12px; padding: 12px 20px; color: #8b949e; font-size: 0.9rem; border-radius: 8px; margin: 2px 10px; cursor: pointer; transition: background 0.15s, color 0.15s; }
     .nav-item:hover { background: #21262d; color: #e6edf3; }
     .nav-item.active { background: #00f5c8; color: #000; font-weight: 700; }
     .nav-item.active:hover { background: #00d9b3; }
@@ -26,10 +28,17 @@
     .btn-logout { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #ef4444; background: transparent; color: #ef4444; font-weight: 600; }
     .btn-logout:hover { background: rgba(239,68,68,0.1); }
 
-    .main { flex: 1; overflow-y: auto; padding: 24px 32px; background: #0d1117; }
+    .main { flex: 1; min-width: 0; overflow-y: auto; background: #0d1117; display: flex; flex-direction: column; }
+    .topbar { position: sticky; top: 0; z-index: 90; display: flex; align-items: center; gap: 12px; padding: 12px 20px; background: rgba(22,27,34,0.94); backdrop-filter: blur(10px); border-bottom: 1px solid #30363d; }
+    .menu-btn { display: inline-flex; align-items: center; justify-content: center; width: 40px; height: 40px; border-radius: 9px; border: 1px solid #30363d; background: #0d1117; color: #e6edf3; font-size: 1.2rem; line-height: 1; flex-shrink: 0; transition: background 0.15s, border-color 0.15s; }
+    .menu-btn:hover { background: #21262d; border-color: #8b949e; }
+    .topbar-title { font-weight: 700; font-size: 1rem; color: #e6edf3; }
+    .topbar-spacer { flex: 1; }
+    .content { padding: 24px 32px; flex: 1; }
     .page { display: none; }
     .page.active { display: block; animation: fadeIn 0.2s ease; }
     @keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+    .sidebar-overlay { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.55); z-index: 99; }
 
     /* Header */
     .header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 28px; }
@@ -41,7 +50,8 @@
     .card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 20px; margin-bottom: 20px; }
     .card-title { font-size: 1rem; font-weight: 700; margin-bottom: 16px; color: #e6edf3; display: flex; align-items: center; gap: 8px; }
     .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; margin-bottom: 20px; }
-    .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 18px; }
+    .stat-card { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 18px; transition: transform 0.15s, border-color 0.15s; }
+    .stat-card:hover { transform: translateY(-2px); border-color: #00f5c8; }
     .stat-value { font-size: 2rem; font-weight: 800; color: #00f5c8; margin-bottom: 4px; }
     .stat-label { font-size: 0.8rem; color: #8b949e; }
     .stat-trend { font-size: 0.75rem; margin-top: 4px; }
@@ -128,15 +138,31 @@
     .toast.success { border-color: #22c55e; color: #22c55e; }
     .toast.error { border-color: #ef4444; color: #ef4444; }
 
-    @media (max-width: 768px) {
-      .app { flex-direction: column; }
-      .sidebar { width: 100%; height: auto; flex-direction: row; overflow-x: auto; border-right: none; border-bottom: 1px solid #30363d; }
-      .sidebar-nav { flex: 1; padding: 10px 0; overflow-x: auto; }
-      .nav-item { white-space: nowrap; flex-shrink: 0; }
-      .main { padding: 16px; }
+    @media (min-width: 901px) {
+      .app.nav-closed .sidebar { margin-left: -260px; }
+    }
+    @media (max-width: 900px) {
+      .sidebar { position: fixed; top: 0; left: 0; bottom: 0; height: 100vh; width: 270px; transform: translateX(-100%); box-shadow: 20px 0 60px rgba(0,0,0,0.5); }
+      .app.nav-open .sidebar { transform: translateX(0); }
+      .app.nav-open .sidebar-overlay { display: block; }
+      .sidebar-close { display: block; }
+      .content { padding: 16px; }
       .grid { grid-template-columns: 1fr 1fr; }
       .form-row { grid-template-columns: 1fr; }
+      .header { flex-direction: column; align-items: flex-start; gap: 10px; }
+      .header-actions { width: 100%; }
+      .header-actions input { min-width: 0 !important; width: 100%; }
+      .topbar { padding: 10px 14px; }
     }
+    @media (max-width: 520px) {
+      .grid { grid-template-columns: 1fr; }
+      .content { padding: 12px; }
+    }
+
+    /* Small polish */
+    .btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .lock-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; color: #8b949e; background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 4px 8px; }
+    .table-wrap th { position: sticky; top: 0; z-index: 1; }
   </style>
 </head>
 <body>
@@ -145,7 +171,6 @@
   <div class="login-card">
     <div class="login-title">🔐 Admin Login</div>
     <div class="login-sub">StudyNest administrator access</div>
-    <div class="login-divider"><span>or</span></div>
     <form id="adminLoginForm">
       <label>Email</label>
       <input type="email" id="loginEmail" placeholder="admin@studynest.local" required>
@@ -161,9 +186,10 @@
 </div>
 
 <div class="app" id="app" style="display:none;">
-  <div class="sidebar">
+  <div class="sidebar" id="sidebar">
     <div class="sidebar-header">
       <div class="sidebar-brand">📚 StudyNest Admin</div>
+      <button class="sidebar-close" onclick="toggleNav(false)" aria-label="Close menu">✕</button>
     </div>
     <div class="sidebar-nav">
       <div class="nav-item active" onclick="showPage('pageDashboard', this)">📊 Dashboard</div>
@@ -178,8 +204,16 @@
       <button class="btn-logout" onclick="doAdminLogout()">Sign Out</button>
     </div>
   </div>
+  <div class="sidebar-overlay" onclick="toggleNav(false)"></div>
 
   <div class="main">
+    <div class="topbar">
+      <button class="menu-btn" onclick="toggleNav()" aria-label="Toggle navigation menu" title="Menu">☰</button>
+      <div class="topbar-title" id="topbarTitle">📊 Dashboard</div>
+      <div class="topbar-spacer"></div>
+      <span class="admin-badge">ADMIN</span>
+    </div>
+    <div class="content">
     <!-- Dashboard -->
     <div class="page active" id="pageDashboard">
       <div class="header">
@@ -226,6 +260,8 @@
         <div class="header-title">👥 User Management</div>
         <div class="header-actions">
           <input type="text" id="userSearch" placeholder="Search users..." oninput="filterUsers()" style="padding:8px 14px;border-radius:8px;border:1px solid #30363d;background:#0d1117;color:#e6edf3;min-width:260px;">
+          <button class="btn btn-ghost" onclick="loadUsers()">Refresh</button>
+          <button class="btn btn-ghost" onclick="exportUsersCSV()">Export CSV</button>
         </div>
       </div>
       <div class="table-wrap">
@@ -235,8 +271,9 @@
               <th>User</th>
               <th>Role</th>
               <th>Status</th>
+              <th>Password</th>
               <th>Joined</th>
-              <th>AI Requests</div>
+              <th>AI Requests</th>
               <th>Actions</th>
             </tr>
           </thead>
@@ -408,10 +445,35 @@
           </tbody>
         </table>
       </div>
+      <div class="card mt-16">
+        <div class="card-title">🔒 Account security</div>
+        <p class="text-muted" style="line-height:1.7;margin-bottom:10px;">
+          Passwords are hashed by Supabase Auth and can never be viewed from this dashboard — not even by an administrator. That is what keeps users safe if the database is ever exposed.
+        </p>
+        <p class="text-muted" style="line-height:1.7;">
+          To reset a password or resend a confirmation email, open Supabase → <b>Authentication → Users</b>. You can also enable email/SMTP so users can reset it themselves from the app.
+        </p>
+      </div>
+    </div>
+    </div><!-- /content -->
+  </div><!-- /main -->
+
+  <div class="modal-overlay" id="passwordModal">
+    <div class="modal">
+      <button class="modal-close" onclick="closePasswordInfo()">✕</button>
+      <div class="modal-title">🔒 Why can't I see passwords?</div>
+      <p class="text-muted" style="line-height:1.7;margin-bottom:12px;">
+        StudyNest never stores plain-text passwords. When a user signs up, Supabase Auth hashes the password with bcrypt and keeps only the hash. The original password cannot be recovered by anyone, including admins.
+      </p>
+      <p class="text-muted" style="line-height:1.7;">
+        If someone forgets their password, reset it in Supabase → <b>Authentication → Users</b>, or let them use “Forgot password” in the app once email is configured.
+      </p>
+      <div class="modal-footer"><button class="btn btn-primary" onclick="closePasswordInfo()">Got it</button></div>
     </div>
   </div>
 
   <div id="toast" class="toast"></div>
+</div><!-- /app -->
 
 <script>
 // ===== CONFIG =====
@@ -432,6 +494,8 @@ async function init() {
       adminUser = me;
       document.getElementById('loginScreen').style.display = 'none';
       document.getElementById('app').style.display = 'flex';
+      document.getElementById('app').classList.remove('nav-closed', 'nav-open');
+      applyAdminIdentity();
       showPage('pageDashboard', document.querySelector('.nav-item'));
       loadAll();
     } catch (e) {
@@ -490,12 +554,20 @@ async function doAdminLogin() {
     }
     document.getElementById('loginScreen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
+    document.getElementById('app').classList.remove('nav-closed', 'nav-open');
+    applyAdminIdentity();
     showPage('pageDashboard', document.querySelector('.nav-item'));
     loadAll();
   } catch (e) {
     err.textContent = e.message || 'Login failed.';
     err.style.display = 'block';
   }
+}
+function applyAdminIdentity() {
+  try {
+    const em = document.getElementById('settingsEmail'); if (em) em.value = (adminUser && adminUser.email) || '';
+    const su = document.getElementById('settingsUrl'); if (su) su.value = SUPABASE_URL;
+  } catch (e) {}
 }
 async function doAdminLogout() {
   try { await apiPost('/auth/v1/logout', {}, true); } catch (e) {}
@@ -509,11 +581,32 @@ async function doAdminLogout() {
 }
 
 // ===== NAVIGATION =====
+function toggleNav(open) {
+  const app = document.getElementById('app');
+  if (!app) return;
+  const mobile = window.matchMedia('(max-width: 900px)').matches;
+  if (open === undefined) {
+    open = mobile ? !app.classList.contains('nav-open') : app.classList.contains('nav-closed');
+  }
+  if (mobile) app.classList.toggle('nav-open', !!open);
+  else app.classList.toggle('nav-closed', !open);
+}
+window.addEventListener('keydown', e => { if (e.key === 'Escape') toggleNav(false); });
+window.addEventListener('resize', () => {
+  const app = document.getElementById('app');
+  if (app && window.matchMedia('(min-width: 901px)').matches) app.classList.remove('nav-open');
+});
 function showPage(id, btn) {
   document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
   document.querySelectorAll('.nav-item').forEach(n => n.classList.remove('active'));
   document.getElementById(id).classList.add('active');
   if (btn) btn.classList.add('active');
+  const title = document.getElementById('topbarTitle');
+  if (title) {
+    const label = btn ? btn.textContent.trim() : (document.querySelector('.nav-item.active') || {}).textContent || '';
+    if (label) title.textContent = label;
+  }
+  if (window.matchMedia('(max-width: 900px)').matches) toggleNav(false);
   if (id === 'pageDashboard') loadDashboard();
   if (id === 'pageUsers') loadUsers();
   if (id === 'pageReports') loadReports();
@@ -592,13 +685,14 @@ function filterUsers() {
 }
 function renderUsers(list) {
   const body = document.getElementById('usersTableBody');
-  if (!list.length) { body.innerHTML = `<tr><td colspan="6" class="empty">No users found.</td></tr>`; return; }
+  if (!list.length) { body.innerHTML = `<tr><td colspan="7" class="empty">No users found.</td></tr>`; return; }
   body.innerHTML = list.map(u => {
     const joined = u.created_at ? new Date(u.created_at).toLocaleDateString() : '-';
     return `<tr>
       <td><div class="user-row"><div class="avatar">${(u.name || 'U')[0].toUpperCase()}</div><div class="user-info"><div class="user-name">${escapeHtml(u.name)}</div><div class="user-meta">@${escapeHtml(u.username)}</div></div></div></td>
       <td><span class="badge badge-${u.role}">${u.role}</span></td>
       <td><span class="badge ${u.suspended ? 'badge-suspended' : 'badge-active'}">${u.suspended ? 'Suspended' : 'Active'}</span></td>
+      <td><span class="lock-tag" title="Passwords are hashed and cannot be viewed">🔒 Hashed</span> <button class="btn btn-sm btn-ghost" onclick="showPasswordInfo('${escapeHtml(u.username)}')" style="padding:4px 8px;font-size:0.7rem;margin-left:4px;">Why?</button></td>
       <td>${joined}</td>
       <td><span class="tag">-</span></td>
       <td>
@@ -771,6 +865,22 @@ function exportAdminData() {
   showToast('Exported ✓');
 }
 function resetAdminCache() { cache = { users: [], reports: [], announcements: [], blocked: [], quotas: [] }; showToast('Cache cleared ✓'); }
+function showPasswordInfo() { const m = document.getElementById('passwordModal'); if (m) m.classList.add('open'); }
+function closePasswordInfo() { const m = document.getElementById('passwordModal'); if (m) m.classList.remove('open'); }
+function exportUsersCSV() {
+  if (!cache.users.length) { showToast('No users to export.', 'error'); return; }
+  const cols = ['username', 'name', 'role', 'suspended', 'created_at', 'updated_at', 'id'];
+  const esc = v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"';
+  const csv = [cols.join(',')].concat(cache.users.map(u => cols.map(c => esc(u[c])).join(','))).join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'studynest-users-' + new Date().toISOString().slice(0, 10) + '.csv';
+  document.body.appendChild(a); a.click();
+  setTimeout(() => { URL.revokeObjectURL(url); a.remove(); }, 500);
+  showToast('Users exported ✓');
+}
 
 // Init
 init();
