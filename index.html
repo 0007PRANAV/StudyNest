@@ -47,6 +47,9 @@
   .btn-danger { background: var(--danger); color: #fff; }
   .btn-ghost { background: transparent; border: 1.5px solid var(--border); color: var(--text); }
   .ghost-hint { color: var(--muted); font-size: 0.72rem; margin-top: 2px; font-style: italic; }
+  .oauth-row { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .oauth-btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; width: 100%; padding: 11px 10px; font-weight: 600; }
+  @media (max-width: 380px) { .oauth-row { grid-template-columns: 1fr; } }
 
   /* MAIN APP */
   #app { display: none; flex-direction: column; min-height: 100vh; }
@@ -334,10 +337,17 @@
     <input class="inp" id="loginUser" placeholder="Username or Email" type="text">
     <input class="inp" id="loginPass" placeholder="Password" type="password">
     <button class="btn btn-primary" onclick="doLogin()">Log In</button>
-    <div class="ghost-hint" style="margin-top:10px;">Or sign in with Google:</div>
-    <button class="btn btn-ghost" onclick="doGoogleSignIn()" style="width:100%;margin-top:8px;">
-      🔑 Sign in with Google
-    </button>
+    <div class="ghost-hint" style="margin-top:10px;">Or continue with:</div>
+    <div class="oauth-row">
+      <button class="btn btn-ghost oauth-btn" onclick="doGoogleSignIn()">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.3-2.1 3.5-5.2 3.5-8.9z"/><path fill="#34A853" d="M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.6V6.7H1.4a12 12 0 0 0 0 10.6l4-2.9z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.7l4 3.1C6.3 6.9 8.9 4.8 12 4.8z"/></svg>
+        Google
+      </button>
+      <button class="btn btn-ghost oauth-btn" onclick="doGitHubSignIn()">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.9 10.9c.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.6 4.5 18.6 4.8 18.6 4.8c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"/></svg>
+        GitHub
+      </button>
+    </div>
     <div id="loginErr" style="color:var(--danger);font-size:0.82rem;text-align:center;display:none;"></div>
   </div>
   <div class="auth-form" id="signupForm" style="display:none;">
@@ -347,10 +357,17 @@
     <input class="inp" id="signupPass" placeholder="Password" type="password">
     <input class="inp" id="signupAge" placeholder="Age" type="number" min="5" max="30">
     <button class="btn btn-primary" onclick="doSignup()">Create Account</button>
-    <div class="ghost-hint" style="margin-top:10px;">Or sign up with Google:</div>
-    <button class="btn btn-ghost" onclick="doGoogleSignUp()" style="width:100%;margin-top:8px;">
-      🔑 Sign up with Google
-    </button>
+    <div class="ghost-hint" style="margin-top:10px;">Or sign up with:</div>
+    <div class="oauth-row">
+      <button class="btn btn-ghost oauth-btn" onclick="doGoogleSignUp()">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><path fill="#4285F4" d="M23.5 12.3c0-.8-.1-1.6-.2-2.3H12v4.5h6.5a5.6 5.6 0 0 1-2.4 3.7v3h3.9c2.3-2.1 3.5-5.2 3.5-8.9z"/><path fill="#34A853" d="M12 24c3.2 0 5.9-1.1 7.9-2.9l-3.9-3c-1.1.7-2.4 1.2-4 1.2-3.1 0-5.7-2.1-6.6-4.9H1.4v3.1A12 12 0 0 0 12 24z"/><path fill="#FBBC05" d="M5.4 14.4a7.2 7.2 0 0 1 0-4.6V6.7H1.4a12 12 0 0 0 0 10.6l4-2.9z"/><path fill="#EA4335" d="M12 4.8c1.8 0 3.3.6 4.6 1.8l3.4-3.4A12 12 0 0 0 1.4 6.7l4 3.1C6.3 6.9 8.9 4.8 12 4.8z"/></svg>
+        Google
+      </button>
+      <button class="btn btn-ghost oauth-btn" onclick="doGitHubSignIn()">
+        <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" fill="currentColor"><path d="M12 .5A11.5 11.5 0 0 0 .5 12a11.5 11.5 0 0 0 7.9 10.9c.6.1.8-.3.8-.6v-2c-3.2.7-3.9-1.5-3.9-1.5-.5-1.3-1.3-1.7-1.3-1.7-1-.7.1-.7.1-.7 1.2.1 1.8 1.2 1.8 1.2 1 1.8 2.7 1.3 3.4 1 .1-.8.4-1.3.7-1.6-2.6-.3-5.3-1.3-5.3-5.7 0-1.3.5-2.3 1.2-3.1-.1-.3-.5-1.5.1-3.1 0 0 1-.3 3.3 1.2a11.5 11.5 0 0 1 6 0C17.6 4.5 18.6 4.8 18.6 4.8c.6 1.6.2 2.8.1 3.1.8.8 1.2 1.8 1.2 3.1 0 4.4-2.7 5.4-5.3 5.7.4.4.8 1.1.8 2.2v3.3c0 .3.2.7.8.6A11.5 11.5 0 0 0 23.5 12 11.5 11.5 0 0 0 12 .5z"/></svg>
+        GitHub
+      </button>
+    </div>
     <div id="signupErr" style="color:var(--danger);font-size:0.82rem;text-align:center;display:none;"></div>
   </div>
 </div>
@@ -1223,7 +1240,28 @@ async function doGoogleSignUp() {
   return doGoogleSignIn();
 }
 
-// Handle the redirect back from Google. supabase-js (PKCE) exchanges the code
+// ===== GITHUB OAUTH =====
+async function doGitHubSignIn() {
+  const err = document.getElementById('loginErr') || document.getElementById('signupErr');
+  try {
+    if (!supabaseAuth) await initSupabaseAuth();
+    if (!supabaseAuth) { err.textContent = 'Supabase not configured'; err.style.display='block'; return; }
+    const { error } = await supabaseAuth.auth.signInWithOAuth({
+      provider: 'github',
+      options: { redirectTo: window.location.origin + '/', scopes: 'read:user user:email' }
+    });
+    if (error) throw error;
+    // The browser is redirected to GitHub now.
+  } catch(e) {
+    const msg = (e && e.message) || 'Unknown error';
+    err.textContent = /provider is not enabled/i.test(msg)
+      ? 'GitHub sign-in is not enabled yet. Ask the site owner to enable the GitHub provider in Supabase.'
+      : 'GitHub sign-in failed: ' + msg;
+    err.style.display='block';
+  }
+}
+
+// Handle the redirect back from Google/GitHub. supabase-js (PKCE) exchanges the code
 // itself when the client is created, so we only need to read the session.
 async function handleGoogleOAuthCallback() {
   if (!supabaseAuth) await initSupabaseAuth();
@@ -1251,7 +1289,7 @@ async function handleGoogleOAuthCallback() {
     if (desc) {
       showAuth();
       const le = document.getElementById('loginErr');
-      if (le) { le.textContent = 'Google sign-in failed: ' + desc; le.style.display = 'block'; }
+      if (le) { le.textContent = 'Sign-in failed: ' + desc; le.style.display = 'block'; }
       window.history.replaceState({}, document.title, window.location.origin + '/');
       return true;
     }
