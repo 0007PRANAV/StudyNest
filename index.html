@@ -320,8 +320,8 @@
   .unread-badge { background: var(--accent); color: #000; border-radius: 10px; min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: .7rem; font-weight: 700; padding: 0 6px; }
   .ai-src { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); font-size: .74rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .ai-src span { color: var(--muted); } .ai-src a { color: var(--accent); background: rgba(0,245,200,.08); padding: 3px 9px; border-radius: 10px; text-decoration: none; }
-<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </style>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
 <body>
 
@@ -1224,7 +1224,7 @@ async function doGoogleSignIn() {
   const err = document.getElementById('loginErr');
   try {
     if (!supabaseAuth) await initSupabaseAuth();
-    if (!supabaseAuth) { err.textContent = 'Supabase not configured'; err.style.display='block'; return; }
+    if (!supabaseAuth) { err.textContent = 'Could not load the sign-in library. Check your connection and try again.'; err.style.display='block'; return; }
     const { error } = await supabaseAuth.auth.signInWithOAuth({
       provider: 'google',
       options: { redirectTo: window.location.origin + '/', queryParams: { access_type: 'offline', prompt: 'consent' } }
@@ -1245,7 +1245,7 @@ async function doGitHubSignIn() {
   const err = document.getElementById('loginErr') || document.getElementById('signupErr');
   try {
     if (!supabaseAuth) await initSupabaseAuth();
-    if (!supabaseAuth) { err.textContent = 'Supabase not configured'; err.style.display='block'; return; }
+    if (!supabaseAuth) { err.textContent = 'Could not load the sign-in library. Check your connection and try again.'; err.style.display='block'; return; }
     const { error } = await supabaseAuth.auth.signInWithOAuth({
       provider: 'github',
       options: { redirectTo: window.location.origin + '/', scopes: 'read:user user:email' }
@@ -1337,7 +1337,8 @@ async function initSupabaseAuth() {
   if (supabaseAuth) return supabaseAuth;
   await sbCfg();
   if (SB.ready && SB.url && SB.key) {
-    const { createClient } = window.supabase || {};
+    const mod = await loadSupabaseJs();
+    const createClient = mod && mod.createClient;
     if (createClient) {
       try {
         supabaseAuth = createClient(SB.url, SB.key, {
@@ -1347,6 +1348,32 @@ async function initSupabaseAuth() {
     }
   }
   return supabaseAuth;
+}
+
+// Load supabase-js on demand. The CDN <script> tag can be blocked or fail,
+// which used to leave window.supabase undefined and break Google/GitHub sign-in.
+let _sbJsPromise = null;
+function loadSupabaseJs() {
+  if (window.supabase && window.supabase.createClient) return Promise.resolve(window.supabase);
+  if (_sbJsPromise) return _sbJsPromise;
+  _sbJsPromise = new Promise(resolve => {
+    const done = () => resolve(window.supabase || null);
+    const s = document.createElement('script');
+    s.src = 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2';
+    s.async = true;
+    s.onload = done;
+    s.onerror = () => {
+      // Second attempt from a different CDN before giving up.
+      const s2 = document.createElement('script');
+      s2.src = 'https://unpkg.com/@supabase/supabase-js@2';
+      s2.async = true;
+      s2.onload = done;
+      s2.onerror = () => resolve(null);
+      document.head.appendChild(s2);
+    };
+    document.head.appendChild(s);
+  });
+  return _sbJsPromise;
 }
 
 // ===== TOPBAR =====
