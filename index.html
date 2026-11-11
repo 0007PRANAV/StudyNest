@@ -67,9 +67,9 @@
   /* BOTTOM NAV */
   .bottom-nav { position: fixed; bottom: 0; left: 50%; transform: translateX(-50%); width: 100%; max-width: 480px; background: var(--surface); border-top: 1px solid var(--border); display: flex; z-index: 200; }
   .bottom-nav { overflow-x: auto; scrollbar-width: none; } .bottom-nav::-webkit-scrollbar { display: none; }
-  .nav-item { flex: 1 0 auto; min-width: 50px; display: flex; flex-direction: column; align-items: center; padding: 10px 4px 8px; cursor: pointer; color: var(--muted); font-size: 0.65rem; gap: 3px; transition: color 0.2s; border: none; background: none; }
+  .nav-item { flex: 1 0 auto; min-width: 44px; display: flex; flex-direction: column; align-items: center; padding: 9px 3px 7px; cursor: pointer; color: var(--muted); font-size: 0.6rem; gap: 3px; transition: color 0.2s; border: none; background: none; }
   .nav-item.active { color: var(--accent); }
-  .nav-icon { font-size: 1.35rem; }
+  .nav-icon { font-size: 1.2rem; }
 
   /* CARDS */
   .card { background: var(--card); border-radius: var(--radius); padding: 16px; margin-bottom: 14px; border: 1px solid var(--border); }
@@ -320,6 +320,97 @@
   .unread-badge { background: var(--accent); color: #000; border-radius: 10px; min-width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; font-size: .7rem; font-weight: 700; padding: 0 6px; }
   .ai-src { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--border); font-size: .74rem; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
   .ai-src span { color: var(--muted); } .ai-src a { color: var(--accent); background: rgba(0,245,200,.08); padding: 3px 9px; border-radius: 10px; text-decoration: none; }
+
+  /* ===== LIBRARY ===== */
+  .lib-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 14px; }
+  .lib-stat { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 8px; text-align: center; }
+  .lib-stat b { display: block; font-size: 1.15rem; color: var(--accent); }
+  .lib-stat span { font-size: .66rem; color: var(--muted); }
+  .lib-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  .lib-book { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; display: flex; flex-direction: column; }
+  .lib-cover { height: 104px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; position: relative; }
+  .lib-cover .lib-lvl { position: absolute; bottom: 6px; right: 6px; font-size: .58rem; background: rgba(0,0,0,.45); padding: 2px 7px; border-radius: 9px; color: #fff; }
+  .lib-body { padding: 10px 11px 12px; display: flex; flex-direction: column; flex: 1; }
+  .lib-title { font-size: .84rem; font-weight: 700; line-height: 1.25; margin-bottom: 2px; }
+  .lib-author { font-size: .68rem; color: var(--muted); margin-bottom: 6px; }
+  .lib-desc { font-size: .68rem; color: var(--muted); line-height: 1.4; flex: 1; margin-bottom: 8px; }
+  .lib-actions { display: flex; gap: 5px; }
+  .lib-actions button, .lib-actions a { flex: 1; text-align: center; padding: 7px 4px; border-radius: 10px; font-size: .68rem; font-weight: 700; border: none; cursor: pointer; text-decoration: none; }
+  .lib-open { background: var(--accent); color: #0f0f1a; }
+  .lib-save { background: rgba(124,58,237,.18); color: #a78bfa; }
+  .lib-save.on { background: var(--accent3); color: #0f0f1a; }
+  .lib-done { position: absolute; top: 6px; left: 6px; background: var(--success); color: #04130a; font-size: .58rem; font-weight: 800; padding: 2px 7px; border-radius: 9px; }
+
+  /* ===== VIDEOS ===== */
+  .vid-card { background: var(--surface); border: 1px solid var(--border); border-radius: 16px; overflow: hidden; margin-bottom: 12px; }
+  .vid-thumb { aspect-ratio: 16/9; background: linear-gradient(135deg, #1e2748, #2b1e3e); display: flex; align-items: center; justify-content: center; font-size: 2.4rem; cursor: pointer; position: relative; }
+  .vid-thumb img { width: 100%; height: 100%; object-fit: cover; }
+  .vid-play { position: absolute; width: 46px; height: 46px; border-radius: 50%; background: rgba(0,0,0,.55); display: flex; align-items: center; justify-content: center; font-size: 1.1rem; color: #fff; border: 2px solid rgba(255,255,255,.5); }
+  .vid-body { padding: 11px 13px 13px; }
+  .vid-title { font-weight: 700; font-size: .9rem; margin-bottom: 3px; }
+  .vid-meta { font-size: .68rem; color: var(--muted); display: flex; gap: 8px; flex-wrap: wrap; }
+  .vid-status { font-size: .64rem; font-weight: 800; padding: 3px 9px; border-radius: 10px; }
+  .vs-pending { background: rgba(245,158,11,.18); color: var(--accent3); }
+  .vs-approved { background: rgba(34,197,94,.18); color: var(--success); }
+  .vs-declined { background: rgba(239,68,68,.18); color: #f87171; }
+  .vid-tabs { display: flex; gap: 6px; margin-bottom: 14px; overflow-x: auto; scrollbar-width: none; }
+  .vid-tabs::-webkit-scrollbar { display: none; }
+
+  /* ===== AWARDS / STREAK ===== */
+  .streak-hero { text-align: center; padding: 18px 14px 14px; background: linear-gradient(150deg, rgba(245,158,11,.16), rgba(124,58,237,.14)); border: 1px solid rgba(245,158,11,.28); border-radius: 20px; margin-bottom: 14px; }
+  .streak-flame { font-size: 3rem; line-height: 1; filter: drop-shadow(0 0 14px rgba(245,158,11,.65)); }
+  .streak-num { font-size: 2.1rem; font-weight: 900; color: var(--accent3); line-height: 1.1; }
+  .streak-cap { font-size: .72rem; color: var(--muted); }
+  .week-dots { display: flex; justify-content: center; gap: 7px; margin-top: 12px; }
+  .week-dot { width: 32px; height: 32px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: .62rem; background: var(--border); color: var(--muted); }
+  .week-dot.done { background: var(--accent3); color: #1a1200; font-weight: 800; }
+  .week-dot.today { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .lvl-bar { height: 9px; background: var(--border); border-radius: 6px; overflow: hidden; margin: 8px 0 4px; }
+  .lvl-bar > div { height: 100%; background: linear-gradient(90deg, var(--accent2), var(--accent)); border-radius: 6px; }
+  .badge-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 9px; }
+  .badge-card { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 10px 7px; text-align: center; opacity: .38; filter: grayscale(1); position: relative; }
+  .badge-card.earned { opacity: 1; filter: none; border-color: rgba(245,158,11,.4); background: linear-gradient(160deg, rgba(245,158,11,.13), var(--surface)); }
+  .badge-ico { font-size: 1.7rem; line-height: 1.2; }
+  .badge-name { font-size: .64rem; font-weight: 700; margin-top: 3px; line-height: 1.2; }
+  .badge-prog { font-size: .56rem; color: var(--muted); margin-top: 3px; }
+  .badge-pts { position: absolute; top: 5px; right: 6px; font-size: .52rem; color: var(--accent3); font-weight: 800; }
+  .badge-filter { display: flex; gap: 5px; overflow-x: auto; margin-bottom: 12px; scrollbar-width: none; }
+  .badge-filter::-webkit-scrollbar { display: none; }
+  .notif-item { padding: 11px 0; border-bottom: 1px solid var(--border); display: flex; gap: 10px; }
+  .notif-item.unread { background: rgba(0,245,200,.05); }
+  .notif-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent); flex-shrink: 0; margin-top: 6px; }
+
+  /* ===== STUDY ROOM / SEATS ===== */
+  .room-tabs { display: flex; gap: 6px; margin-bottom: 14px; }
+  .room-tab { flex: 1; padding: 9px 6px; border-radius: 12px; font-size: .76rem; font-weight: 700; border: 1px solid var(--border); background: var(--surface); color: var(--muted); cursor: pointer; }
+  .room-tab.on { background: var(--accent); color: #0f0f1a; border-color: var(--accent); }
+  .focus-ring { width: 210px; height: 210px; margin: 4px auto 10px; position: relative; }
+  .focus-ring svg { transform: rotate(-90deg); }
+  .focus-inner { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; }
+  .focus-time { font-size: 2.3rem; font-weight: 900; font-variant-numeric: tabular-nums; }
+  .focus-label { font-size: .7rem; color: var(--muted); }
+  .focus-presets { display: flex; gap: 6px; justify-content: center; margin: 10px 0; }
+  .focus-preset { padding: 7px 14px; border-radius: 12px; border: 1px solid var(--border); background: var(--surface); color: var(--text); font-size: .74rem; font-weight: 700; cursor: pointer; }
+  .focus-preset.on { background: var(--accent2); color: #fff; border-color: var(--accent2); }
+  .focus-week { display: flex; justify-content: space-between; align-items: flex-end; gap: 6px; height: 74px; margin-top: 8px; }
+  .focus-bar { flex: 1; background: var(--border); border-radius: 6px 6px 3px 3px; min-height: 3px; position: relative; }
+  .focus-bar > i { position: absolute; bottom: 0; left: 0; right: 0; background: linear-gradient(180deg, var(--accent), var(--accent2)); border-radius: 6px 6px 3px 3px; }
+  .focus-day { font-size: .58rem; color: var(--muted); text-align: center; margin-top: 4px; }
+  .room-person { display: flex; align-items: center; gap: 10px; padding: 9px 0; border-bottom: 1px solid var(--border); }
+  .room-person .user-avatar { width: 36px; height: 36px; font-size: .85rem; }
+  .goal-chip { display: inline-flex; align-items: center; gap: 5px; padding: 4px 10px; border-radius: 12px; font-size: .68rem; font-weight: 700; background: rgba(0,245,200,.12); color: var(--accent); }
+
+  /* ===== NOTIFICATION BELL ===== */
+  .bell-wrap { position: relative; margin-right: 10px; cursor: pointer; font-size: 1.25rem; }
+  .bell-count { position: absolute; top: -5px; right: -7px; background: var(--danger); color: #fff; font-size: .56rem; font-weight: 800; min-width: 15px; height: 15px; border-radius: 8px; display: flex; align-items: center; justify-content: center; padding: 0 3px; }
+  .topbar-right { display: flex; align-items: center; }
+  .streak-chip { display: flex; align-items: center; gap: 3px; margin-right: 10px; padding: 4px 9px; border-radius: 12px; background: rgba(245,158,11,.14); border: 1px solid rgba(245,158,11,.32); color: var(--accent3); font-size: .74rem; font-weight: 800; cursor: pointer; }
+  .streak-chip:active { transform: scale(.95); }
+
+  /* ===== ADMIN (in-app moderation) ===== */
+  .mod-item { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 12px; margin-bottom: 10px; }
+  .mod-item .btn { padding: 8px 12px; font-size: .72rem; }
+  @media (max-width: 360px) { .lib-grid { grid-template-columns: 1fr; } .badge-grid { grid-template-columns: repeat(2, 1fr); } }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 </head>
@@ -384,7 +475,11 @@
 <div id="app">
   <div class="topbar">
     <div class="topbar-title">📚 StudyNest</div>
-    <div class="topbar-pfp" id="topbarPfp" onclick="goProfile()"></div>
+    <div class="topbar-right">
+      <div class="streak-chip" id="topbarStreak" onclick="showPage('pageAwards', document.querySelector('.nav-item[onclick*=&quot;pageAwards&quot;]'))" title="Daily streak — tap to see your rewards">🔥 <span id="topbarStreakNum">0</span></div>
+      <div class="bell-wrap" id="notifBell" onclick="notificationsModal()" title="Notifications">🔔<span class="bell-count" id="notifCount" style="display:none;">0</span></div>
+      <div class="topbar-pfp" id="topbarPfp" onclick="goProfile()"></div>
+    </div>
   </div>
 
   <!-- PAGES -->
@@ -437,22 +532,15 @@
     <div id="hwList"></div>
   </div>
 
-  <!-- SEATING -->
+  <!-- STUDY ROOM (was Seating) -->
   <div class="page" id="pageSeating">
-    <div class="section-title">🪑 Seating Arrangement</div>
-    <div class="day-indicator" id="seatDayLabel">📅 Loading...</div>
-    <div class="card">
-      <div style="font-size:0.8rem;color:var(--muted);margin-bottom:12px;">Tap an empty seat to claim it for today. Seats refresh daily.</div>
-      <div class="seating-grid" id="seatingGrid"></div>
+    <div class="section-title">🪑 Study Room</div>
+    <div class="room-tabs">
+      <button class="room-tab on" id="roomTabSeat" onclick="roomTab('seat')">🪑 Seat</button>
+      <button class="room-tab" id="roomTabFocus" onclick="roomTab('focus')">⏱️ Focus</button>
+      <button class="room-tab" id="roomTabRoom" onclick="roomTab('room')">👥 Room</button>
     </div>
-    <div class="card mt-12">
-      <div style="font-size:0.8rem;font-weight:600;margin-bottom:6px;">Legend</div>
-      <div style="display:flex;gap:12px;font-size:0.78rem;color:var(--muted);">
-        <span>🟢 Your seat</span>
-        <span>🟣 Taken</span>
-        <span>⬛ Empty</span>
-      </div>
-    </div>
+    <div id="roomBody"></div>
   </div>
 
   <!-- FRIENDS -->
@@ -497,6 +585,35 @@
     <div class="section-title">📢 Announcements</div>
     <div id="announceAdminPanel"></div>
     <div id="announceList"></div>
+  </div>
+
+  <!-- LIBRARY -->
+  <div class="page" id="pageLibrary">
+    <div class="section-title">📚 Library</div>
+    <div id="libraryRoot"></div>
+  </div>
+
+  <!-- VIDEOS -->
+  <div class="page" id="pageVideos">
+    <div class="section-title">🎬 Video Library</div>
+    <div class="vid-tabs">
+      <button class="ai-mini-btn" id="vidTabWatch" onclick="videoTab('watch')" style="background:var(--accent);color:#000;">▶️ Watch</button>
+      <button class="ai-mini-btn" id="vidTabSubmit" onclick="videoTab('submit')">⬆️ Submit</button>
+      <button class="ai-mini-btn" id="vidTabMine" onclick="videoTab('mine')">📤 My uploads</button>
+      <button class="ai-mini-btn" id="vidTabMod" onclick="videoTab('moderate')" style="display:none;">🛡️ Moderate</button>
+    </div>
+    <div id="videoRoot"></div>
+  </div>
+
+  <!-- AWARDS: streak, badges, inbox -->
+  <div class="page" id="pageAwards">
+    <div class="section-title">🏆 Achievements</div>
+    <div class="room-tabs">
+      <button class="room-tab on" id="awTabStreak" onclick="awardsTab('streak')">🔥 Streak</button>
+      <button class="room-tab" id="awTabBadges" onclick="awardsTab('badges')">🏅 Badges</button>
+      <button class="room-tab" id="awTabInbox" onclick="awardsTab('inbox')">🔔 Inbox</button>
+    </div>
+    <div id="awardsRoot"></div>
   </div>
 
   <!-- PROFILE (modal-like page) -->
@@ -563,6 +680,15 @@
     </button>
     <button class="nav-item" onclick="showPage('pageStudy',this)">
       <span class="nav-icon">🎯</span>Study
+    </button>
+    <button class="nav-item" onclick="showPage('pageLibrary',this)">
+      <span class="nav-icon">📚</span>Library
+    </button>
+    <button class="nav-item" onclick="showPage('pageVideos',this)">
+      <span class="nav-icon">🎬</span>Videos
+    </button>
+    <button class="nav-item" onclick="showPage('pageAwards',this)">
+      <span class="nav-icon">🏆</span>Awards
     </button>
     <button class="nav-item" onclick="showPage('pageHomework',this)">
       <span class="nav-icon">📝</span>Homework
@@ -767,9 +893,13 @@ function refreshAfterSync(changedKey) {
   try { renderQP(); } catch(e) {}
   try { renderHomework(); } catch(e) {}
   try { renderTimetable(); } catch(e) {}
-  try { renderSeating(); } catch(e) {}
+  try { renderRoomTab(); } catch(e) {}
   try { renderFriends(); } catch(e) {}
   try { renderAnnouncements(); } catch(e) {}
+  try { renderLibrary(); } catch(e) {}
+  try { renderVideos(); } catch(e) {}
+  try { renderAwards(); } catch(e) {}
+  try { renderTopbar(); } catch(e) {}
   if (String(changedKey).startsWith('aichats_')) {
     try {
       aiLoadedFor = null; aiStore = null;
@@ -1073,7 +1203,7 @@ async function migrateLegacyFiles() {
 }
 
 function showAuth() { document.getElementById('authScreen').style.display='flex'; document.getElementById('app').style.display='none'; document.getElementById('suspendScreen').style.display='none'; }
-function showApp() { document.getElementById('authScreen').style.display='none'; document.getElementById('app').style.display='flex'; document.getElementById('suspendScreen').style.display='none'; renderTopbar(); renderNotes(); renderHomework(); renderSeating(); renderFriends(); renderAnnouncements(); }
+function showApp() { document.getElementById('authScreen').style.display='none'; document.getElementById('app').style.display='flex'; document.getElementById('suspendScreen').style.display='none'; renderTopbar(); renderNotes(); renderHomework(); renderRoomTab(); renderFriends(); renderAnnouncements(); try { initGamification(); } catch (e) {} }
 function showSuspended() { document.getElementById('authScreen').style.display='none'; document.getElementById('app').style.display='none'; document.getElementById('suspendScreen').style.display='flex'; }
 
 // ===== AUTH =====
@@ -1381,6 +1511,11 @@ function renderTopbar() {
   const pfp = document.getElementById('topbarPfp');
   if (currentUser.pfp) { pfp.innerHTML = `<img src="${currentUser.pfp}">`; }
   else { pfp.textContent = currentUser.name[0].toUpperCase(); }
+  try { updateNotifBadge(); } catch(e) {}
+  try {
+    const el = document.getElementById('topbarStreakNum');
+    if (el && currentUser) el.textContent = streakGet().current || 0;
+  } catch(e) {}
 }
 
 function goProfile() { showPage('pageProfile', null); renderProfile(); }
@@ -1393,7 +1528,7 @@ function showPage(id, btn) {
   if (btn) btn.classList.add('active');
   if (id === 'pageNotes') renderNotes();
   if (id === 'pageQP') renderQP();
-  if (id === 'pageSeating') renderSeating();
+  if (id === 'pageSeating') renderRoomTab();
   if (id === 'pageFriends') renderFriends();
   if (id === 'pageAnnounce') renderAnnouncements();
   if (id === 'pageTimetable') renderTimetable();
@@ -1402,6 +1537,9 @@ function showPage(id, btn) {
   document.getElementById('aiFab').classList.toggle('gone', id === 'pageAI'); aiNavH();
   if (id === 'pageStudy') renderStudy();
   if (id === 'pageAI') aiEnter();
+  if (id === 'pageLibrary') renderLibrary();
+  if (id === 'pageVideos') renderVideos();
+  if (id === 'pageAwards') renderAwards();
 }
 // keeps the chat box and the floating button exactly above the bottom nav, whatever its height
 function aiNavH() { const n = document.querySelector('.bottom-nav'); if (n && n.offsetHeight > 20) document.documentElement.style.setProperty('--nav-h', n.offsetHeight + 'px'); }
@@ -1450,7 +1588,11 @@ function getFolders(kind, subject) {
   }
   return data;
 }
-function saveFolders(kind, subject, folders) { return storeSet(fKey(kind, subject), folders); }
+function saveFolders(kind, subject, folders) {
+  const r = storeSet(fKey(kind, subject), folders);
+  try { gamifySoon('notes'); } catch (e) {}
+  return r;
+}
 
 function renderNotes() { renderSection('notes'); }
 function renderQP() { renderSection('qp'); }
@@ -2328,6 +2470,7 @@ async function addHomework() {
   storeSet('hw_' + currentUser.username, hw);
   document.getElementById('hwText').value = '';
   renderHomework();
+  try { gamifySoon('hw'); } catch (e) {}
 }
 async function toggleHW(id) {
   try {
@@ -2404,19 +2547,23 @@ async function claimSeat(sid) {
   const day = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'][new Date().getDay()];
   const seatKey = 'seats_' + dayNum;
   let seats = storeGet(seatKey) || {};
-  // Remove current user from any seat
-  Object.keys(seats).forEach(k => { if (seats[k] === currentUser.username) delete seats[k]; });
-  // If clicking own seat, just unclaim
+  // Clicking your own seat releases it.
   if (seats[sid] === currentUser.username) {
+    delete seats[sid];
     try { await sbReleaseSeat(day, parseInt(sid.split('_')[0]), parseInt(sid.split('_')[1])); } catch(e) {}
-    storeSet(seatKey, seats); renderSeating(); return;
+    storeSet(seatKey, seats); renderRoomTab(); return;
   }
   // If taken by someone else, show who
-  if (seats[sid]) { showToast('🟣 Seat taken by ' + (storeGet('users')||{})[seats[sid]]?.name); return; }
+  if (seats[sid]) { showToast('🟣 Seat taken by ' + ((storeGet('users')||{})[seats[sid]]?.name || seats[sid])); return; }
+  // Remove current user from any other seat, then take this one.
+  Object.keys(seats).forEach(k => { if (seats[k] === currentUser.username) delete seats[k]; });
   seats[sid] = currentUser.username;
   try { await sbClaimSeat(day, parseInt(sid.split('_')[0]), parseInt(sid.split('_')[1])); await sbRecordUsage('seat_claim', 1); } catch(e) {}
   storeSet(seatKey, seats);
-  renderSeating();
+  const sc = storeGet('seatcount_' + currentUser.username) || 0;
+  storeSet('seatcount_' + currentUser.username, sc + 1);
+  try { gamifyTick('seat'); } catch (e) {}
+  renderRoomTab();
 }
 
 // ===== FRIENDS =====
@@ -2498,6 +2645,7 @@ function acceptFriend(username) {
   storeSet('users',users);
   currentUser=me;
   renderFriends();
+  try { gamifySoon('friends'); } catch (e) {}
 }
 function removeFriend(username) {
   const users = storeGet('users')||{};
@@ -2820,6 +2968,11 @@ function aiUseNote(ok, data) {
     if (!ok) u.err++;
     else { u.n++; const p = (data && data.provider) || 'unknown'; u.by[p] = (u.by[p] || 0) + 1; u.last = { provider: p, model: (data && data.model) || '', ts: Date.now() }; if (p !== 'gemini' && p !== 'unknown') { u.fall++; if (prev !== p) showToast('⚡ Gemini is busy or out of quota, so ' + aiProvLabel(p, data.model) + ' answered'); } }
     storeSet(aiUseKey(), u); aiUseChip();
+    if (ok) {
+      const tk = 'aitotal_' + currentUser.username;
+      storeSet(tk, (storeGet(tk) || 0) + 1);
+      try { gamifyTick('ai'); } catch (e) {}
+    }
   } catch (e) {}
 }
 function aiUseChip() { const b = $id('aiUseBtn'); if (!b) return; const u = aiUseGet(); b.textContent = '📊 ' + u.n; b.style.borderColor = u.n >= AI_DAILY_LIMIT * 0.9 ? 'var(--danger)' : ''; }
@@ -2880,7 +3033,9 @@ async function studyMakeCards(topic, n, deck) {
   const arr = studyJSON(await studyAsk('Make ' + n + ' flashcards about: ' + studyClip(topic, 2200) + '\nFormat: [{"front":"question or term","back":"short correct answer, max 25 words"}]. Match the student\'s class and board.'));
   const cards = sGet('cards', []), now = Date.now(); let added = 0;
   arr.forEach(c => { const f = studyClip(c && c.front, 200), b = studyClip(c && c.back, 400); if (f && b && !cards.some(x => x.front === f)) { cards.push({ id: uid(), front: f, back: b, deck: studyClip(deck || 'General', 40), box: 1, due: now, ok: 0, bad: 0, created: now }); added++; } });
-  sSet('cards', cards); return added;
+  sSet('cards', cards);
+  try { gamifySoon('cards'); } catch (e) {}
+  return added;
 }
 function studyShuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
 async function studyMakeQuiz(topic, n) {
@@ -2936,7 +3091,7 @@ async function studyCardsFromForm() {
   try { const n = await studyMakeCards(t, parseInt($id('cardN').value) || 8, studyClip(t, 30)); showToast(n ? n + ' cards added ✓' : 'No new cards (they may already exist)'); } catch (e) { showToast(e.message || 'Could not make cards'); }
   studyBusy = false; if (studyTab === 'cards') studyCardsUI();
 }
-function studyAddCard() { const f = studyClip($id('cardF').value, 200), b = studyClip($id('cardB').value, 400); if (!f || !b) { showToast('Fill both sides'); return; } const c = sGet('cards', []); c.push({ id: uid(), front: f, back: b, deck: 'My cards', box: 1, due: Date.now(), ok: 0, bad: 0, created: Date.now() }); sSet('cards', c); studyCardsUI(); }
+function studyAddCard() { const f = studyClip($id('cardF').value, 200), b = studyClip($id('cardB').value, 400); if (!f || !b) { showToast('Fill both sides'); return; } const c = sGet('cards', []); c.push({ id: uid(), front: f, back: b, deck: 'My cards', box: 1, due: Date.now(), ok: 0, bad: 0, created: Date.now() }); sSet('cards', c); studyCardsUI(); try { gamifySoon('cards'); } catch (e) {} }
 function studyDelCard(id) { sSet('cards', sGet('cards', []).filter(c => c.id !== id)); renderStudy(); }
 function studyStartReview() { const q = studyShuffle(sGet('cards', []).filter(c => c.due <= Date.now()).map(c => c.id)).slice(0, 30); if (!q.length) return; studyReview = { q, i: 0, show: false, ok: 0 }; studyCardsUI(); }
 function studyReviewUI() {
@@ -2985,7 +3140,7 @@ async function studyQuizFromForm() {
 function studyPick(i) { studyQuiz.picks[studyQuiz.i] = i; studyQuizUI(); }
 function studyNextQ() {
   const q = studyQuiz; q.i++;
-  if (q.i >= q.qs.length) { const score = q.picks.filter((p, i) => p != null && q.qs[i].opts[p].c).length, hist = sGet('quiz', []); hist.push({ ts: Date.now(), topic: q.topic, score, total: q.qs.length }); sSet('quiz', hist.slice(-50)); }
+  if (q.i >= q.qs.length) { const score = q.picks.filter((p, i) => p != null && q.qs[i].opts[p].c).length, hist = sGet('quiz', []); hist.push({ ts: Date.now(), topic: q.topic, score, total: q.qs.length }); sSet('quiz', hist.slice(-50)); try { gamifySoon('quiz'); } catch (e) {} }
   studyQuizUI();
 }
 function studyMissedToCards() {
@@ -3091,6 +3246,15 @@ async function sbReq(method, path, body, auth) {
   if (!r.ok) throw new Error((j && (j.message || j.error || j.hint)) || 'Supabase error (HTTP ' + r.status + ')');
   return j;
 }
+
+// Generic read helper: sbGet('table', 'select=*&limit=10')
+async function sbGet(table, query) {
+  const q = query ? (String(query).startsWith('?') ? query : '?' + query) : '';
+  return sbReq('GET', '/rest/v1/' + table + q, null, true);
+}
+async function sbInsert(table, rows) { return sbReq('POST', '/rest/v1/' + table, rows, true); }
+async function sbPatch(table, filter, patch) { return sbReq('PATCH', '/rest/v1/' + table + '?' + filter, patch, true); }
+async function sbDelete(table, filter) { return sbReq('DELETE', '/rest/v1/' + table + '?' + filter, null, true); }
 
 // ---- Auth ----
 async function sbLogin(email, password) {
@@ -4385,6 +4549,1278 @@ async function handlePfpUpload(event) {
   renderProfile();
   renderTopbar();
   showToast('Profile photo updated!');
+}
+
+// =====================================================================
+// LIBRARY · VIDEOS · STREAKS · BADGES · NOTIFICATIONS · STUDY ROOM
+// =====================================================================
+
+// ---------------------------------------------------------------------
+// LIBRARY CATALOG
+// A curated, always-available shelf of free / open books and courses.
+// Custom books added by an admin are merged in from Supabase.
+// ---------------------------------------------------------------------
+const LIB_CATS = [
+  ['all', '✨ All'], ['fiction', '📖 Fiction'], ['classic', '🏛️ Classics'],
+  ['science', '🔬 Science'], ['maths', '📐 Maths'], ['tech', '💻 Technology'],
+  ['history', '🏺 History'], ['philosophy', '🧠 Philosophy'], ['self', '🌱 Self-growth'],
+  ['exam', '🎯 Exam prep'], ['language', '🗣️ Languages'], ['business', '💼 Business'],
+  ['art', '🎨 Art & Design'], ['kids', '🧸 Kids']
+];
+const LIBRARY_CATALOG = [
+  // [id, title, author, category, emoji, description, url, level, minutes]
+  ['pride-prejudice', 'Pride and Prejudice', 'Jane Austen', 'classic', '📕', 'Wit, manners and one of the most quoted love stories in English.', 'https://www.gutenberg.org/ebooks/1342', 'Intermediate', 660],
+  ['frankenstein', 'Frankenstein', 'Mary Shelley', 'classic', '🧟', 'A young scientist creates life — and has to live with the consequences.', 'https://www.gutenberg.org/ebooks/84', 'Intermediate', 480],
+  ['dracula', 'Dracula', 'Bram Stoker', 'classic', '🦇', 'The original vampire novel, told through letters and diaries.', 'https://www.gutenberg.org/ebooks/345', 'Intermediate', 600],
+  ['sherlock', 'The Adventures of Sherlock Holmes', 'Arthur Conan Doyle', 'fiction', '🔍', 'Twelve detective stories that defined the genre.', 'https://www.gutenberg.org/ebooks/1661', 'Beginner', 420],
+  ['gatsby', 'The Great Gatsby', 'F. Scott Fitzgerald', 'fiction', '🥂', 'A short, sharp portrait of ambition and the American Dream.', 'https://www.gutenberg.org/ebooks/64317', 'Intermediate', 300],
+  ['moby-dick', 'Moby-Dick', 'Herman Melville', 'classic', '🐋', 'Obsession, the sea, and the white whale. Long but rewarding.', 'https://www.gutenberg.org/ebooks/2701', 'Advanced', 900],
+  ['alice', "Alice's Adventures in Wonderland", 'Lewis Carroll', 'kids', '🐇', 'Logic, wordplay and nonsense — perfect for curious readers.', 'https://www.gutenberg.org/ebooks/11', 'Beginner', 180],
+  ['time-machine', 'The Time Machine', 'H. G. Wells', 'science', '⏳', 'One of the first time-travel stories, and still one of the best.', 'https://www.gutenberg.org/ebooks/35', 'Beginner', 210],
+  ['war-worlds', 'The War of the Worlds', 'H. G. Wells', 'science', '🛸', 'Martians invade England. The ancestor of every alien story.', 'https://www.gutenberg.org/ebooks/36', 'Beginner', 240],
+  ['dorian-gray', 'The Picture of Dorian Gray', 'Oscar Wilde', 'classic', '🖼️', 'A portrait ages while its subject stays young. Pure Wilde.', 'https://www.gutenberg.org/ebooks/174', 'Intermediate', 420],
+  ['jungle-book', 'The Jungle Book', 'Rudyard Kipling', 'kids', '🐅', 'Mowgli, Baloo and Bagheera — better than the films.', 'https://www.gutenberg.org/ebooks/236', 'Beginner', 240],
+  ['treasure-island', 'Treasure Island', 'Robert Louis Stevenson', 'fiction', '🏴‍☠️', 'The pirate adventure that gave us Long John Silver.', 'https://www.gutenberg.org/ebooks/120', 'Beginner', 300],
+  ['20000-leagues', 'Twenty Thousand Leagues Under the Sea', 'Jules Verne', 'science', '🐙', 'Captain Nemo, the Nautilus and the wonders of the deep.', 'https://www.gutenberg.org/ebooks/164', 'Intermediate', 480],
+  ['around-world', 'Around the World in Eighty Days', 'Jules Verne', 'fiction', '🎈', 'A race against the clock across every continent.', 'https://www.gutenberg.org/ebooks/103', 'Beginner', 300],
+  ['little-women', 'Little Women', 'Louisa May Alcott', 'fiction', '🌸', 'Four sisters growing up — warm, funny and quietly powerful.', 'https://www.gutenberg.org/ebooks/514', 'Intermediate', 540],
+  ['anne-green-gables', 'Anne of Green Gables', 'L. M. Montgomery', 'kids', '🌿', 'An orphan finds a home on Prince Edward Island.', 'https://www.gutenberg.org/ebooks/45', 'Beginner', 420],
+  ['secret-garden', 'The Secret Garden', 'Frances Hodgson Burnett', 'kids', '🌻', 'A hidden garden heals a lonely girl and her cousin.', 'https://www.gutenberg.org/ebooks/17396', 'Beginner', 360],
+  ['wizard-oz', 'The Wonderful Wizard of Oz', 'L. Frank Baum', 'kids', '🌪️', 'A cyclone, a yellow brick road and a very unusual wizard.', 'https://www.gutenberg.org/ebooks/55', 'Beginner', 240],
+  ['tom-sawyer', 'The Adventures of Tom Sawyer', 'Mark Twain', 'fiction', '🎣', 'Childhood, mischief and a Mississippi river town.', 'https://www.gutenberg.org/ebooks/74', 'Beginner', 300],
+  ['huck-finn', 'Adventures of Huckleberry Finn', 'Mark Twain', 'fiction', '🛶', 'A raft journey that changed American literature.', 'https://www.gutenberg.org/ebooks/76', 'Intermediate', 420],
+  ['call-wild', 'The Call of the Wild', 'Jack London', 'fiction', '🐺', 'A domestic dog discovers the wild inside him.', 'https://www.gutenberg.org/ebooks/215', 'Beginner', 240],
+  ['robinson-crusoe', 'Robinson Crusoe', 'Daniel Defoe', 'classic', '🏝️', 'Shipwreck, survival and twenty-eight years alone.', 'https://www.gutenberg.org/ebooks/521', 'Intermediate', 480],
+  ['gulliver', "Gulliver's Travels", 'Jonathan Swift', 'classic', '🧭', 'Travel satire that is still sharp three centuries later.', 'https://www.gutenberg.org/ebooks/829', 'Intermediate', 420],
+  ['monte-cristo', 'The Count of Monte Cristo', 'Alexandre Dumas', 'classic', '🗝️', 'Betrayal, prison, treasure and the perfect revenge.', 'https://www.gutenberg.org/ebooks/1184', 'Advanced', 1200],
+  ['les-mis', 'Les Misérables', 'Victor Hugo', 'classic', '🕯️', 'Justice, mercy and revolution in nineteenth-century France.', 'https://www.gutenberg.org/ebooks/135', 'Advanced', 1500],
+  ['crime-punishment', 'Crime and Punishment', 'Fyodor Dostoevsky', 'classic', '🪓', 'A psychological thriller before the genre existed.', 'https://www.gutenberg.org/ebooks/2554', 'Advanced', 720],
+  ['anna-karenina', 'Anna Karenina', 'Leo Tolstoy', 'classic', '🚂', 'Family, desire and society in imperial Russia.', 'https://www.gutenberg.org/ebooks/1399', 'Advanced', 1080],
+  ['war-peace', 'War and Peace', 'Leo Tolstoy', 'classic', '⚔️', 'Napoleon, five families and the meaning of history.', 'https://www.gutenberg.org/ebooks/2600', 'Advanced', 1800],
+  ['middlemarch', 'Middlemarch', 'George Eliot', 'classic', '🏘️', 'A whole town, rendered with extraordinary sympathy.', 'https://www.gutenberg.org/ebooks/145', 'Advanced', 900],
+  ['emma', 'Emma', 'Jane Austen', 'classic', '💌', 'A matchmaker who cannot see her own heart.', 'https://www.gutenberg.org/ebooks/158', 'Intermediate', 600],
+  ['hound-baskervilles', 'The Hound of the Baskervilles', 'Arthur Conan Doyle', 'fiction', '🐕', 'Holmes on the moor: fog, footprints and a family curse.', 'https://www.gutenberg.org/ebooks/2852', 'Beginner', 300],
+  ['lost-world', 'The Lost World', 'Arthur Conan Doyle', 'science', '🦕', 'A plateau where dinosaurs never went extinct.', 'https://www.gutenberg.org/ebooks/139', 'Beginner', 300],
+  ['metamorphosis', 'The Metamorphosis', 'Franz Kafka', 'fiction', '🪲', 'A man wakes up as an insect. Short, strange, unforgettable.', 'https://www.gutenberg.org/ebooks/5200', 'Intermediate', 120],
+  ['heart-darkness', 'Heart of Darkness', 'Joseph Conrad', 'classic', '🌑', 'A river journey into the dark side of empire.', 'https://www.gutenberg.org/ebooks/219', 'Advanced', 240],
+  ['scarlet-letter', 'The Scarlet Letter', 'Nathaniel Hawthorne', 'classic', '🅰️', 'Guilt, shame and a society that will not forgive.', 'https://www.gutenberg.org/ebooks/33', 'Intermediate', 360],
+  ['flatland', 'Flatland', 'Edwin A. Abbott', 'maths', '🔷', 'A novella that teaches you to imagine higher dimensions.', 'https://www.gutenberg.org/ebooks/201', 'Beginner', 180],
+  ['don-quixote', 'Don Quixote', 'Miguel de Cervantes', 'classic', '🐴', 'The first modern novel: funny, sad and endlessly inventive.', 'https://www.gutenberg.org/ebooks/996', 'Advanced', 1200],
+  ['odyssey', 'The Odyssey', 'Homer', 'classic', '⛵', 'The original adventure story, in a readable prose translation.', 'https://www.gutenberg.org/ebooks/1727', 'Intermediate', 720],
+  ['iliad', 'The Iliad', 'Homer', 'classic', '🛡️', 'War, honour and rage before the walls of Troy.', 'https://www.gutenberg.org/ebooks/6130', 'Advanced', 720],
+  ['origin-species', 'On the Origin of Species', 'Charles Darwin', 'science', '🧬', 'The book that changed biology forever. Read it slowly.', 'https://www.gutenberg.org/ebooks/1228', 'Advanced', 720],
+  ['relativity', 'Relativity: The Special and General Theory', 'Albert Einstein', 'science', '🌌', 'Einstein explains his own theory for non-specialists.', 'https://www.gutenberg.org/ebooks/5001', 'Advanced', 300],
+  ['openstax-biology', 'Biology 2e', 'OpenStax', 'science', '🧫', 'A complete, free, peer-reviewed biology textbook.', 'https://openstax.org/details/books/biology-2e', 'Advanced', 2400],
+  ['openstax-chemistry', 'Chemistry 2e', 'OpenStax', 'science', '⚗️', 'Atoms, bonding, reactions and labs — free textbook.', 'https://openstax.org/details/books/chemistry-2e', 'Advanced', 2400],
+  ['openstax-physics', 'University Physics Volume 1', 'OpenStax', 'science', '⚡', 'Mechanics, waves and thermodynamics with worked examples.', 'https://openstax.org/details/books/university-physics-volume-1', 'Advanced', 2400],
+  ['openstax-anatomy', 'Anatomy and Physiology 2e', 'OpenStax', 'science', '🫀', 'How the human body is built and how it works.', 'https://openstax.org/details/books/anatomy-and-physiology-2e', 'Advanced', 2400],
+  ['openstax-astronomy', 'Astronomy 2e', 'OpenStax', 'science', '🔭', 'From the solar system to distant galaxies.', 'https://openstax.org/details/books/astronomy-2e', 'Intermediate', 1800],
+  ['openstax-microbiology', 'Microbiology', 'OpenStax', 'science', '🦠', 'Bacteria, viruses, immunity and the microscopic world.', 'https://openstax.org/details/books/microbiology', 'Advanced', 1800],
+  ['openstax-algebra', 'Algebra and Trigonometry 2e', 'OpenStax', 'maths', '📐', 'Functions, equations, proofs and trigonometry.', 'https://openstax.org/details/books/algebra-and-trigonometry-2e', 'Intermediate', 1800],
+  ['openstax-calculus', 'Calculus Volume 1', 'OpenStax', 'maths', '∫', 'Limits, derivatives and integrals with clear examples.', 'https://openstax.org/details/books/calculus-volume-1', 'Advanced', 1800],
+  ['openstax-precalc', 'Precalculus 2e', 'OpenStax', 'maths', '📊', 'Everything you need before starting calculus.', 'https://openstax.org/details/books/precalculus-2e', 'Intermediate', 1500],
+  ['openstax-stats', 'Introductory Statistics 2e', 'OpenStax', 'maths', '🎲', 'Probability, distributions and real data analysis.', 'https://openstax.org/details/books/introductory-statistics-2e', 'Intermediate', 1200],
+  ['mit-calc', 'MIT Single Variable Calculus', 'MIT OpenCourseWare', 'maths', '🧮', 'Full video lectures, notes and problem sets — free.', 'https://ocw.mit.edu/courses/18-01sc-single-variable-calculus-fall-2010/', 'Advanced', 1800],
+  ['eloquent-js', 'Eloquent JavaScript', 'Marijn Haverbeke', 'tech', '💛', 'The best free book for learning JavaScript properly.', 'https://eloquentjavascript.net/', 'Intermediate', 900],
+  ['py4e', 'Python for Everybody', 'Charles Severance', 'tech', '🐍', 'Programming, data and web basics with Python.', 'https://www.py4e.com/book', 'Beginner', 900],
+  ['automate-boring', 'Automate the Boring Stuff with Python', 'Al Sweigart', 'tech', '🤖', 'Practical Python for everyday tasks. Free online.', 'https://automatetheboringstuff.com/', 'Beginner', 720],
+  ['pro-git', 'Pro Git', 'Scott Chacon', 'tech', '🌳', 'Version control from first commit to advanced workflows.', 'https://git-scm.com/book/en/v2', 'Intermediate', 480],
+  ['mdn-js', 'MDN JavaScript Guide', 'Mozilla', 'tech', '🌐', 'The reference every web developer keeps open.', 'https://developer.mozilla.org/en-US/docs/Web/JavaScript/Guide', 'Intermediate', 600],
+  ['cs50', 'CS50: Introduction to Computer Science', 'Harvard University', 'tech', '🎓', 'Harvard\'s famous free CS course, with problem sets.', 'https://cs50.harvard.edu/x/', 'Beginner', 2400],
+  ['mit-python', 'MIT Introduction to CS and Programming in Python', 'MIT OpenCourseWare', 'tech', '🐍', 'A rigorous, free first course in programming.', 'https://ocw.mit.edu/courses/6-0001-introduction-to-computer-science-and-programming-in-python-fall-2016/', 'Beginner', 1800],
+  ['openstax-world-history', 'World History Volume 1', 'OpenStax', 'history', '🌍', 'From ancient societies to the early modern world.', 'https://openstax.org/details/books/world-history-volume-1', 'Intermediate', 1800],
+  ['openstax-us-history', 'U.S. History', 'OpenStax', 'history', '🦅', 'A complete, free history of the United States.', 'https://openstax.org/details/books/us-history', 'Intermediate', 1800],
+  ['art-of-war', 'The Art of War', 'Sun Tzu', 'history', '🏯', 'Strategy, timing and knowing your ground.', 'https://www.gutenberg.org/ebooks/132', 'Beginner', 90],
+  ['prince', 'The Prince', 'Niccolò Machiavelli', 'history', '👑', 'The most argued-about book on political power.', 'https://www.gutenberg.org/ebooks/1232', 'Intermediate', 240],
+  ['republic', 'The Republic', 'Plato', 'philosophy', '🏛️', 'Justice, education and the ideal city. The cave is here.', 'https://www.gutenberg.org/ebooks/1497', 'Advanced', 720],
+  ['meditations', 'Meditations', 'Marcus Aurelius', 'philosophy', '🧘', 'A Roman emperor\'s private notes on self-control.', 'https://www.gutenberg.org/ebooks/2680', 'Beginner', 300],
+  ['nicomachean', 'Nicomachean Ethics', 'Aristotle', 'philosophy', '📜', 'What makes a good life? Aristotle\'s answer.', 'https://www.gutenberg.org/ebooks/8438', 'Advanced', 600],
+  ['common-sense', 'Common Sense', 'Thomas Paine', 'history', '🗽', 'The pamphlet that helped start a revolution.', 'https://www.gutenberg.org/ebooks/147', 'Beginner', 120],
+  ['manifest', 'The Communist Manifesto', 'Karl Marx & Friedrich Engels', 'history', '🚩', 'Short, influential and worth reading critically.', 'https://www.gutenberg.org/ebooks/61', 'Intermediate', 120],
+  ['as-a-man-thinketh', 'As a Man Thinketh', 'James Allen', 'self', '💭', 'A tiny classic about habits of thought.', 'https://www.gutenberg.org/ebooks/4507', 'Beginner', 60],
+  ['prophet', 'The Prophet', 'Kahlil Gibran', 'self', '🕊️', 'Poetic reflections on love, work and freedom.', 'https://www.gutenberg.org/ebooks/58585', 'Beginner', 120],
+  ['how-to-live', 'How to Live on 24 Hours a Day', 'Arnold Bennett', 'self', '⏰', 'A practical classic on using small blocks of time.', 'https://www.gutenberg.org/ebooks/2274', 'Beginner', 120],
+  ['walden', 'Walden', 'Henry David Thoreau', 'self', '🌲', 'Two years in a cabin, and a case for a simpler life.', 'https://www.gutenberg.org/ebooks/205', 'Intermediate', 420],
+  ['openstax-psychology', 'Psychology 2e', 'OpenStax', 'self', '🧠', 'Memory, learning, emotion and behaviour.', 'https://openstax.org/details/books/psychology-2e', 'Intermediate', 1800],
+  ['openstax-economics', 'Principles of Economics 3e', 'OpenStax', 'business', '💰', 'Supply, demand, markets and policy.', 'https://openstax.org/details/books/principles-economics-3e', 'Intermediate', 1800],
+  ['openstax-business-ethics', 'Business Ethics', 'OpenStax', 'business', '⚖️', 'How to make decisions when money and values collide.', 'https://openstax.org/details/books/business-ethics', 'Intermediate', 1200],
+  ['wealth-nations', 'The Wealth of Nations', 'Adam Smith', 'business', '🏦', 'The founding text of modern economics.', 'https://www.gutenberg.org/ebooks/3300', 'Advanced', 1500],
+  ['openstax-sociology', 'Introduction to Sociology 2e', 'OpenStax', 'history', '👥', 'Society, culture, inequality and institutions.', 'https://openstax.org/details/books/introduction-sociology-2e', 'Intermediate', 1500],
+  ['elements-style', 'The Elements of Style', 'William Strunk Jr.', 'language', '✍️', 'The classic little guide to clear writing.', 'https://www.gutenberg.org/ebooks/37134', 'Beginner', 90],
+  ['aesop', "Aesop's Fables", 'Aesop', 'kids', '🦊', 'Short stories with a lesson in every one.', 'https://www.gutenberg.org/ebooks/11339', 'Beginner', 120],
+  ['grimm', "Grimm's Fairy Tales", 'Brothers Grimm', 'kids', '🧚', 'The original, darker versions of the tales you know.', 'https://www.gutenberg.org/ebooks/2591', 'Beginner', 360],
+  ['shakespeare', 'The Complete Works of Shakespeare', 'William Shakespeare', 'art', '🎭', 'Every play and poem, searchable and free.', 'https://www.gutenberg.org/ebooks/100', 'Advanced', 3000],
+  ['leaves-grass', 'Leaves of Grass', 'Walt Whitman', 'art', '🍃', 'American poetry that made room for everything.', 'https://www.gutenberg.org/ebooks/1322', 'Intermediate', 300],
+  ['ncert', 'NCERT Textbooks (Classes 6–12)', 'NCERT', 'exam', '🇮🇳', 'Official school textbooks for every class and subject.', 'https://ncert.nic.in/textbook.php', 'All levels', 2400],
+  ['khan-math', 'Khan Academy Math', 'Khan Academy', 'exam', '➗', 'Free lessons from arithmetic to calculus, with practice.', 'https://www.khanacademy.org/math', 'All levels', 1800],
+  ['khan-science', 'Khan Academy Science', 'Khan Academy', 'exam', '🔬', 'Physics, chemistry, biology and more — free.', 'https://www.khanacademy.org/science', 'All levels', 1800],
+  ['khan-computing', 'Khan Academy Computing', 'Khan Academy', 'tech', '⌨️', 'Programming, algorithms and the internet, from scratch.', 'https://www.khanacademy.org/computing', 'Beginner', 1200]
+].map(b => ({ id: b[0], title: b[1], author: b[2], cat: b[3], emoji: b[4], desc: b[5], url: b[6], level: b[7], mins: b[8] }));
+
+const LIB_BOOKS_BY_ID = new Map(LIBRARY_CATALOG.map(b => [b.id, b]));
+let libCustomCache = [];
+let libCat = 'all';
+let libQuery = '';
+
+function libProgress() {
+  const p = storeGet('lib_' + currentUser.username);
+  return p && typeof p === 'object' ? p : { read: {}, saved: {} };
+}
+function libSaveProgress(p) { storeSet('lib_' + currentUser.username, p); }
+function libAllBooks() {
+  const seen = new Set(LIBRARY_CATALOG.map(b => b.id));
+  const extra = libCustomCache.filter(b => b && b.id && !seen.has(b.id));
+  return LIBRARY_CATALOG.concat(extra);
+}
+async function libLoadCustom() {
+  try {
+    const rows = await sbGet('library_books', 'select=*&order=created_at.desc&limit=300');
+    if (Array.isArray(rows)) {
+      libCustomCache = rows.map(r => ({
+        id: r.id, title: r.title, author: r.author || 'Unknown', cat: r.category || 'General',
+        emoji: r.emoji || '📘', desc: r.description || '', url: r.url, level: r.level || 'All levels',
+        mins: r.pages ? r.pages : null, custom: true
+      }));
+      return;
+    }
+  } catch (e) {}
+  const local = storeGet('libcustom_' + currentUser.username);
+  libCustomCache = Array.isArray(local) ? local : [];
+}
+
+function renderLibrary() {
+  const root = document.getElementById('libraryRoot');
+  if (!root || !currentUser) return;
+  root.innerHTML = '<div class="empty-state"><div class="empty-icon">📚</div><p>Opening the shelves…</p></div>';
+  libLoadCustom().then(() => {
+    if (!document.getElementById('libraryRoot')) return;
+    drawLibrary();
+  });
+}
+function drawLibrary() {
+  const root = document.getElementById('libraryRoot');
+  if (!root) return;
+  const p = libProgress(), readN = Object.keys(p.read || {}).length, savedN = Object.keys(p.saved || {}).length;
+  const books = libAllBooks();
+  const extraCats = [...new Set(books.map(b => b.cat))].filter(c => !LIB_CATS.some(x => x[0] === c)).map(c => [c, '📘 ' + c]);
+  const cats = LIB_CATS.concat(extraCats);
+  const pills = cats.map(c => `<button class="pill ${libCat === c[0] ? 'selected' : ''}" onclick="libSetCat('${c[0].replace(/'/g, "\\'")}')">${c[1]}</button>`).join('');
+  const isAdmin = currentUser.role === 'admin';
+  root.innerHTML = `
+    <div class="lib-stats">
+      <div class="lib-stat"><b>${books.length}</b><span>books &amp; courses</span></div>
+      <div class="lib-stat"><b>${readN}</b><span>opened</span></div>
+      <div class="lib-stat"><b>${savedN}</b><span>saved</span></div>
+    </div>
+    <div class="search-bar"><span>🔍</span><input id="libSearch" placeholder="Search by title, author or topic…" value="${escapeHtml(libQuery)}" oninput="libSearchChanged(this.value)"></div>
+    <div class="pill-row" id="libCats">${pills}</div>
+    ${isAdmin ? `<div class="card" style="padding:12px;"><div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="document.getElementById('libAddBox').style.display=document.getElementById('libAddBox').style.display==='none'?'block':'none';">
+        <div style="font-weight:700;color:var(--accent3);font-size:.85rem;">🛠️ Add a book (admin)</div><span style="color:var(--muted);">＋</span></div>
+        <div id="libAddBox" style="display:none;margin-top:12px;">
+          <input class="inp" id="libAddTitle" placeholder="Book title" style="margin-bottom:8px;">
+          <input class="inp" id="libAddAuthor" placeholder="Author" style="margin-bottom:8px;">
+          <input class="inp" id="libAddUrl" placeholder="Link (https://…)" style="margin-bottom:8px;">
+          <input class="inp" id="libAddCat" placeholder="Category (e.g. Science)" style="margin-bottom:8px;">
+          <input class="inp" id="libAddDesc" placeholder="One-line description" style="margin-bottom:8px;">
+          <button class="btn btn-accent w-full" onclick="libAddBook()">Add to library</button>
+        </div>
+      </div>` : ''}
+    <div id="libGrid"></div>`;
+  drawLibGrid();
+}
+function libSetCat(c) { libCat = c; drawLibrary(); }
+function libSearchChanged(v) { libQuery = v; drawLibGrid(); }
+function drawLibGrid() {
+  const grid = document.getElementById('libGrid');
+  if (!grid) return;
+  const p = libProgress();
+  const q = libQuery.trim().toLowerCase();
+  let books = libAllBooks().filter(b => {
+    if (libCat !== 'all' && b.cat !== libCat) return false;
+    if (!q) return true;
+    return (b.title + ' ' + b.author + ' ' + b.desc + ' ' + b.cat).toLowerCase().includes(q);
+  });
+  if (!books.length) { grid.innerHTML = `<div class="empty-state"><div class="empty-icon">🔍</div><p>No books match that search.</p></div>`; return; }
+  grid.innerHTML = '<div class="lib-grid">' + books.map(b => {
+    const isRead = !!(p.read || {})[b.id], isSaved = !!(p.saved || {})[b.id];
+    return `<div class="lib-book">
+      <div class="lib-cover" style="background:linear-gradient(145deg,${libColor(b.cat)},#16213e);">
+        ${b.emoji || '📘'}${isRead ? '<span class="lib-done">✓ Read</span>' : ''}<span class="lib-lvl">${escapeHtml(b.level || 'All levels')}</span>
+      </div>
+      <div class="lib-body">
+        <div class="lib-title">${escapeHtml(b.title)}</div>
+        <div class="lib-author">${escapeHtml(b.author)} · ${escapeHtml(b.cat)}</div>
+        <div class="lib-desc">${escapeHtml(b.desc)}</div>
+        <div class="lib-actions">
+          <button class="lib-open" onclick="libOpen('${b.id}')">Open</button>
+          <button class="lib-save ${isSaved ? 'on' : ''}" onclick="libToggleSave('${b.id}')">${isSaved ? '★' : '☆'}</button>
+          ${b.custom && currentUser.role === 'admin' ? `<button class="lib-save" style="background:rgba(239,68,68,.15);color:#f87171;" onclick="libDeleteBook('${b.id}')">🗑</button>` : ''}
+        </div>
+      </div>
+    </div>`;
+  }).join('') + '</div>';
+}
+function libColor(cat) {
+  return { fiction: '#2b1e3e', classic: '#3a2a1e', science: '#123a3a', maths: '#1e2748', tech: '#1e2b48', history: '#3a1e2a', philosophy: '#2a2a3e', self: '#1e3a2a', exam: '#3a301e', language: '#2e1e3a', business: '#1e3a30', art: '#3a1e2a', kids: '#2a3a1e' }[cat] || '#1e2748';
+}
+function libOpen(id) {
+  const b = libAllBooks().find(x => x.id === id);
+  if (!b) return;
+  const p = libProgress();
+  p.read = p.read || {};
+  if (!p.read[id]) { p.read[id] = Date.now(); libSaveProgress(p); }
+  try { gamifyTick('library'); } catch (e) {}
+  window.open(b.url, '_blank', 'noopener');
+  drawLibGrid();
+}
+function libToggleSave(id) {
+  const p = libProgress();
+  p.saved = p.saved || {};
+  if (p.saved[id]) delete p.saved[id]; else p.saved[id] = Date.now();
+  libSaveProgress(p); drawLibrary();
+}
+async function libAddBook() {
+  const title = (document.getElementById('libAddTitle').value || '').trim();
+  const author = (document.getElementById('libAddAuthor').value || '').trim() || 'Unknown';
+  const url = (document.getElementById('libAddUrl').value || '').trim();
+  const category = (document.getElementById('libAddCat').value || '').trim() || 'General';
+  const description = (document.getElementById('libAddDesc').value || '').trim();
+  if (!title || !/^https?:\/\//i.test(url)) { showToast('Add a title and a valid https link.'); return; }
+  const row = { title, author, category, description, url, emoji: '📘', level: 'All levels', is_public: true, created_by: localStorage.getItem('sb_uid') || null };
+  let saved = false;
+  try { await sbReq('POST', '/rest/v1/library_books', row, true); saved = true; } catch (e) {}
+  if (!saved) {
+    const local = storeGet('libcustom_' + currentUser.username) || [];
+    local.unshift({ id: 'local_' + uid(), title, author, cat: category, emoji: '📘', desc: description, url, level: 'All levels', custom: true });
+    storeSet('libcustom_' + currentUser.username, local);
+  }
+  showToast(saved ? 'Book added to the shared library ✓' : 'Book added on this device (run the new SQL to share it).');
+  await libLoadCustom(); drawLibrary();
+}
+async function libDeleteBook(id) {
+  if (!confirm('Remove this book from the library?')) return;
+  if (String(id).startsWith('local_')) {
+    const local = (storeGet('libcustom_' + currentUser.username) || []).filter(b => b.id !== id);
+    storeSet('libcustom_' + currentUser.username, local);
+  } else {
+    try { await sbReq('DELETE', '/rest/v1/library_books?id=eq.' + encodeURIComponent(id), null, true); } catch (e) { showToast('Could not delete that book.'); return; }
+  }
+  await libLoadCustom(); drawLibrary();
+}
+
+// ---------------------------------------------------------------------
+// VIDEOS — approved wall + moderated uploads
+// ---------------------------------------------------------------------
+const VIDEO_PICKS = [
+  { id: 'pick-khan', title: 'Khan Academy — full maths & science lessons', author: 'Khan Academy', cat: 'Maths & Science', emoji: '➗', url: 'https://www.youtube.com/@khanacademy', desc: 'Step-by-step lessons from arithmetic to calculus and physics.' },
+  { id: 'pick-3b1b', title: '3Blue1Brown — maths, beautifully explained', author: '3Blue1Brown', cat: 'Maths', emoji: '🌀', url: 'https://www.youtube.com/@3blue1brown', desc: 'Visual intuition for calculus, linear algebra and neural networks.' },
+  { id: 'pick-crash', title: 'CrashCourse — fast, accurate overviews', author: 'CrashCourse', cat: 'All subjects', emoji: '🚀', url: 'https://www.youtube.com/@crashcourse', desc: 'History, biology, chemistry, literature and more in short series.' },
+  { id: 'pick-mit', title: 'MIT OpenCourseWare — real university lectures', author: 'MIT OCW', cat: 'University', emoji: '🎓', url: 'https://www.youtube.com/@mitocw', desc: 'Full courses from MIT, free to watch.' },
+  { id: 'pick-veritasium', title: 'Veritasium — the science behind everyday things', author: 'Veritasium', cat: 'Science', emoji: '🔬', url: 'https://www.youtube.com/@veritasium', desc: 'Experiments, interviews and surprising physics.' },
+  { id: 'pick-kurz', title: 'Kurzgesagt — big ideas, animated', author: 'Kurzgesagt', cat: 'Science', emoji: '🌍', url: 'https://www.youtube.com/@kurzgesagt', desc: 'Clear animations on space, biology, climate and technology.' },
+  { id: 'pick-ted', title: 'TED-Ed — short lessons worth sharing', author: 'TED-Ed', cat: 'All subjects', emoji: '💡', url: 'https://www.youtube.com/@TEDEd', desc: 'Animated lessons on science, history, language and study skills.' },
+  { id: 'pick-natgeo', title: 'National Geographic — the living planet', author: 'National Geographic', cat: 'Geography', emoji: '🦁', url: 'https://www.youtube.com/@NatGeo', desc: 'Wildlife, geography and climate documentaries.' }
+];
+let currentVideoTab = 'watch';
+let videoCache = new Map();
+
+function videoTab(t) {
+  currentVideoTab = t;
+  const map = { watch: 'vidTabWatch', submit: 'vidTabSubmit', mine: 'vidTabMine', moderate: 'vidTabMod' };
+  Object.keys(map).forEach(k => {
+    const el = document.getElementById(map[k]);
+    if (!el) return;
+    el.style.background = k === t ? 'var(--accent)' : '';
+    el.style.color = k === t ? '#000' : '';
+  });
+  renderVideoTab();
+}
+function renderVideos() {
+  const mod = document.getElementById('vidTabMod');
+  if (mod) mod.style.display = currentUser && currentUser.role === 'admin' ? '' : 'none';
+  if (currentUser && currentUser.role === 'admin' && currentVideoTab === 'watch') {
+    // keep the admin on their current tab; do not force-switch
+  }
+  renderVideoTab();
+}
+function renderVideoTab() {
+  if (!currentUser) return;
+  if (currentVideoTab === 'watch') renderVideoWatch();
+  else if (currentVideoTab === 'submit') renderVideoSubmit();
+  else if (currentVideoTab === 'mine') renderVideoMine();
+  else if (currentVideoTab === 'moderate') renderVideoModerate();
+}
+async function videoRows(query) {
+  try { const rows = await sbGet('video_submissions', query); return Array.isArray(rows) ? rows : []; } catch (e) { return []; }
+}
+function localVideos() { const v = storeGet('videos_' + currentUser.username); return Array.isArray(v) ? v : []; }
+function saveLocalVideos(list) { storeSet('videos_' + currentUser.username, list.slice(0, 100)); }
+
+async function renderVideoWatch() {
+  const root = document.getElementById('videoRoot');
+  if (!root) return;
+  root.innerHTML = '<div class="empty-state"><div class="empty-icon">🎬</div><p>Loading approved videos…</p></div>';
+  let rows = await videoRows('select=*&status=eq.approved&order=created_at.desc&limit=60');
+  const local = localVideos().filter(v => v.status === 'approved');
+  local.forEach(v => { if (!rows.some(r => r.id === v.id)) rows.push(v); });
+  rows.forEach(r => videoCache.set(r.id, r));
+  VIDEO_PICKS.forEach(p => videoCache.set(p.id, p));
+  const community = rows.map(v => videoCard(v, false)).join('');
+  const picks = VIDEO_PICKS.map(v => videoCard(v, true)).join('');
+  root.innerHTML = `
+    <div class="card" style="background:linear-gradient(140deg,rgba(0,245,200,.1),rgba(124,58,237,.12));border-color:rgba(0,245,200,.25);">
+      <div style="font-weight:700;font-size:.95rem;margin-bottom:3px;">🎓 Only useful videos, checked by a human</div>
+      <div style="font-size:.76rem;color:var(--muted);line-height:1.5;">Every student upload is reviewed by an admin before it appears here. No spam, no random clips — just explanations that help you learn.</div>
+    </div>
+    ${community ? `<div style="font-weight:700;font-size:.86rem;margin:4px 0 10px;">✅ Approved by StudyNest</div>${community}` : ''}
+    <div style="font-weight:700;font-size:.86rem;margin:${community ? '16px' : '4px'} 0 10px;">📺 StudyNest picks</div>
+    ${picks}
+    <button class="btn btn-accent w-full mt-12" onclick="videoTab('submit')">⬆️ Share a video with the class</button>`;
+}
+function videoCard(v, isPick) {
+  const status = v.status ? `<span class="vid-status vs-${v.status}">${v.status === 'pending' ? '⏳ Waiting for Admin\'s Approval' : v.status === 'approved' ? '✅ Approved' : '❌ Declined'}</span>` : '';
+  const meta = isPick ? 'Curated channel · Free' : `${escapeHtml(v.username || 'Student')} · ${escapeHtml(v.category || 'Educational')} · ${v.created_at ? new Date(v.created_at).toLocaleDateString() : 'today'}`;
+  return `<div class="vid-card">
+    <div class="vid-thumb" onclick="watchVideo('${v.id}')">
+      <span>${v.emoji || '🎬'}</span><span class="vid-play">▶</span>
+    </div>
+    <div class="vid-body">
+      <div class="vid-title">${escapeHtml(v.title || 'Untitled video')}</div>
+      <div class="vid-meta"><span>${meta}</span>${status}</div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:6px;line-height:1.4;">${escapeHtml(v.desc || v.description || '')}</div>
+    </div>
+  </div>`;
+}
+function watchVideo(id) {
+  const v = videoCache.get(id);
+  if (!v) { showToast('That video is not available any more.'); return; }
+  const url = v.url || '';
+  const isFile = /\.(mp4|webm|ogg|mov|m4v)(\?|$)/i.test(url) || /\/storage\/v1\/object\/public\/videos\//.test(url);
+  const stats = storeGet('vstats_' + currentUser.username) || { watch: 0, submit: 0, approved: 0 };
+  stats.watch = (stats.watch || 0) + 1;
+  storeSet('vstats_' + currentUser.username, stats);
+  try { gamifyTick('video'); } catch (e) {}
+  if (isFile) {
+    openModal(`<div class="modal-title">🎬 ${escapeHtml(v.title || 'Video')}</div>
+      <video src="${escapeHtml(url)}" controls playsinline autoplay style="width:100%;border-radius:12px;background:#000;"></video>
+      <div style="font-size:.75rem;color:var(--muted);margin-top:10px;">${escapeHtml(v.desc || v.description || '')}</div>
+      <div style="display:flex;gap:8px;margin-top:12px;"><a class="btn btn-ghost" style="flex:1;text-align:center;text-decoration:none;" href="${escapeHtml(url)}" target="_blank" rel="noopener">Open in new tab</a><button class="btn btn-accent" style="flex:1;" onclick="closeModalDirect()">Close</button></div>`);
+  } else {
+    openModal(`<div class="modal-title">🎬 ${escapeHtml(v.title || 'Video')}</div>
+      <div style="font-size:.84rem;color:var(--muted);line-height:1.6;margin-bottom:12px;">${escapeHtml(v.desc || v.description || 'This video opens on another site.')}</div>
+      <div style="display:flex;gap:8px;"><a class="btn btn-accent" style="flex:1;text-align:center;text-decoration:none;" href="${escapeHtml(url)}" target="_blank" rel="noopener">▶ Watch now</a><button class="btn btn-ghost" style="flex:1;" onclick="closeModalDirect()">Close</button></div>`);
+  }
+}
+
+function renderVideoSubmit() {
+  const root = document.getElementById('videoRoot');
+  if (!root) return;
+  root.innerHTML = `
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:4px;">⬆️ Submit an informative video</div>
+      <div style="font-size:.76rem;color:var(--muted);line-height:1.5;margin-bottom:12px;">It will show as <b style="color:var(--accent3);">⏳ Waiting for Admin's Approval</b> until a moderator approves it. Only educational content is accepted.</div>
+      <input class="inp" id="vidTitle" placeholder="Video title" maxlength="120" style="margin-bottom:8px;">
+      <select class="inp" id="vidCat" style="margin-bottom:8px;">
+        <option>Maths</option><option>Science</option><option>English</option><option>History</option>
+        <option>Geography</option><option>Computer Science</option><option>Exam tips</option><option>Study skills</option><option>Other</option>
+      </select>
+      <textarea class="inp" id="vidDesc" rows="3" placeholder="What does this video teach? (one or two lines)" maxlength="400" style="margin-bottom:8px;"></textarea>
+      <input class="inp" id="vidUrl" placeholder="Paste a link (YouTube, Drive, MP4…)" style="margin-bottom:8px;">
+      <div style="font-size:.72rem;color:var(--muted);margin:2px 0 6px;">— or upload a video file (max 100 MB) —</div>
+      <input class="inp" id="vidFile" type="file" accept="video/*" style="margin-bottom:10px;padding:10px;">
+      <div id="vidSubmitMsg" style="font-size:.76rem;color:var(--danger);margin-bottom:8px;"></div>
+      <button class="btn btn-accent w-full" id="vidSubmitBtn" onclick="submitVideo()">Send for approval</button>
+    </div>
+    <div class="card" style="font-size:.76rem;color:var(--muted);line-height:1.6;">
+      <b style="color:var(--text);">Before you upload</b><br>
+      • You must own the video or have permission to share it.<br>
+      • No copyrighted films, music videos or gaming clips.<br>
+      • Keep it under 10 minutes and make sure the audio is clear.<br>
+      • You will get an in-app notification and an email when it is approved or declined.
+    </div>`;
+}
+async function videoUpload(file, path) {
+  await sbCfg();
+  if (!SB.ready) throw new Error('Cloud storage is not configured.');
+  const r = await fetch(SB.url + '/storage/v1/object/videos/' + path, {
+    method: 'POST',
+    headers: { apikey: SB.key, Authorization: 'Bearer ' + (SB.tok || SB.key), 'Content-Type': file.type || 'video/mp4', 'x-upsert': 'true' },
+    body: file
+  });
+  if (!r.ok) throw new Error((await r.text() || 'Upload failed').slice(0, 180));
+  return SB.url + '/storage/v1/object/public/videos/' + path;
+}
+async function submitVideo() {
+  const btn = document.getElementById('vidSubmitBtn');
+  const msg = document.getElementById('vidSubmitMsg');
+  const title = (document.getElementById('vidTitle').value || '').trim();
+  const category = document.getElementById('vidCat').value;
+  const description = (document.getElementById('vidDesc').value || '').trim();
+  const link = (document.getElementById('vidUrl').value || '').trim();
+  const file = (document.getElementById('vidFile').files || [])[0];
+  const fail = m => { if (msg) msg.textContent = m; };
+  if (!title) { fail('Give your video a title.'); return; }
+  if (!link && !file) { fail('Paste a link or choose a video file.'); return; }
+  if (link && !/^https?:\/\//i.test(link)) { fail('The link must start with http:// or https://'); return; }
+  if (file && file.size > 104857600) { fail('That file is larger than 100 MB. Upload it to YouTube or Drive and paste the link instead.'); return; }
+  if (btn) { btn.disabled = true; btn.textContent = 'Sending…'; }
+  fail('');
+  let url = link, storagePath = '';
+  try {
+    if (file) {
+      const uidv = localStorage.getItem('sb_uid') || 'local';
+      const safe = (file.name || 'video.mp4').replace(/[^a-zA-Z0-9._-]/g, '_').slice(-70);
+      storagePath = uidv + '/' + Date.now() + '_' + safe;
+      url = await videoUpload(file, storagePath);
+    }
+    const email = (storeGet('users') || {})[currentUser.username]?.email || currentUser.email || '';
+    const row = { user_id: localStorage.getItem('sb_uid') || null, username: currentUser.username, email, title, description, category, url, storage_path: storagePath, status: 'pending' };
+    let online = false;
+    try { await sbReq('POST', '/rest/v1/video_submissions', row, true); online = true; } catch (e) {}
+    const local = localVideos();
+    local.unshift({ id: 'local_' + uid(), title, description, desc: description, category, url, storage_path: storagePath, status: 'pending', created_at: new Date().toISOString(), local: true });
+    saveLocalVideos(local);
+    const vs = storeGet('vstats_' + currentUser.username) || { watch: 0, submit: 0, approved: 0 };
+    vs.submit = (vs.submit || 0) + 1; storeSet('vstats_' + currentUser.username, vs);
+    try { gamifyTick('video'); } catch (e) {}
+    document.getElementById('videoRoot').innerHTML = `<div class="card" style="text-align:center;padding:28px 18px;border-color:rgba(245,158,11,.4);">
+      <div style="font-size:2.6rem;">⏳</div>
+      <div style="font-weight:800;font-size:1.05rem;margin:6px 0 4px;">Waiting for Admin's Approval</div>
+      <div style="font-size:.8rem;color:var(--muted);line-height:1.55;">“${escapeHtml(title)}” was sent to the moderators. You will get a notification and an email when it is reviewed.</div>
+      <div style="font-size:.68rem;color:var(--muted);margin-top:10px;">${online ? 'Saved to the cloud for every device.' : 'Saved on this device. Run the new SQL file to share it with the admins.'}</div>
+      <div style="display:flex;gap:8px;margin-top:14px;"><button class="btn btn-ghost" style="flex:1;" onclick="videoTab('mine')">My uploads</button><button class="btn btn-accent" style="flex:1;" onclick="videoTab('watch')">Watch videos</button></div>
+    </div>`;
+  } catch (e) {
+    fail('Could not send the video: ' + (e.message || 'unknown error') + '. Try pasting a link instead.');
+    if (btn) { btn.disabled = false; btn.textContent = 'Send for approval'; }
+  }
+}
+async function renderVideoMine() {
+  const root = document.getElementById('videoRoot');
+  if (!root) return;
+  root.innerHTML = '<div class="empty-state"><div class="empty-icon">📤</div><p>Loading your uploads…</p></div>';
+  let rows = await videoRows('select=*&user_id=eq.' + encodeURIComponent(localStorage.getItem('sb_uid') || '00000000-0000-0000-0000-000000000000') + '&order=created_at.desc&limit=50');
+  const local = localVideos();
+  local.forEach(v => { if (!rows.some(r => r.id === v.id)) rows.push(v); });
+  rows.forEach(r => videoCache.set(r.id, r));
+  const approved = rows.filter(r => r.status === 'approved').length;
+  const vs = storeGet('vstats_' + currentUser.username) || {};
+  vs.approved = Math.max(vs.approved || 0, approved);
+  storeSet('vstats_' + currentUser.username, vs);
+  if (!rows.length) {
+    root.innerHTML = `<div class="empty-state"><div class="empty-icon">📤</div><p>You have not uploaded anything yet.</p></div><button class="btn btn-accent w-full" onclick="videoTab('submit')">⬆️ Submit your first video</button>`;
+    return;
+  }
+  root.innerHTML = `<div style="font-size:.76rem;color:var(--muted);margin-bottom:10px;">${rows.length} upload${rows.length === 1 ? '' : 's'} · ${approved} approved</div>` +
+    rows.map(v => `<div class="vid-card"><div class="vid-body">
+      <div class="flex-between" style="gap:8px;align-items:flex-start;"><div class="vid-title" style="margin:0;">${escapeHtml(v.title)}</div><span class="vid-status vs-${v.status}">${v.status === 'pending' ? '⏳ Waiting for Admin\'s Approval' : v.status === 'approved' ? '✅ Approved' : '❌ Declined'}</span></div>
+      <div class="vid-meta" style="margin-top:5px;"><span>${escapeHtml(v.category || 'Educational')}</span><span>${v.created_at ? new Date(v.created_at).toLocaleDateString() : ''}</span></div>
+      ${v.admin_note ? `<div style="font-size:.72rem;color:var(--accent3);margin-top:7px;background:rgba(245,158,11,.1);padding:7px 9px;border-radius:9px;">Admin: ${escapeHtml(v.admin_note)}</div>` : ''}
+      <div style="display:flex;gap:6px;margin-top:9px;"><button class="ai-mini-btn" onclick="watchVideo('${v.id}')">▶ Preview</button>${v.status === 'pending' ? `<button class="ai-mini-btn" style="color:var(--danger);" onclick="withdrawVideo('${v.id}')">Withdraw</button>` : ''}</div>
+    </div></div>`).join('');
+}
+async function withdrawVideo(id) {
+  if (!confirm('Withdraw this submission?')) return;
+  if (!String(id).startsWith('local_')) {
+    try { await sbReq('DELETE', '/rest/v1/video_submissions?id=eq.' + encodeURIComponent(id), null, true); } catch (e) { showToast('Could not withdraw it.'); return; }
+  }
+  saveLocalVideos(localVideos().filter(v => v.id !== id));
+  showToast('Submission withdrawn.');
+  renderVideoTab();
+}
+async function renderVideoModerate() {
+  const root = document.getElementById('videoRoot');
+  if (!root) return;
+  if (!currentUser || currentUser.role !== 'admin') { root.innerHTML = '<div class="empty-state"><div class="empty-icon">🔒</div><p>Admins only.</p></div>'; return; }
+  root.innerHTML = '<div class="empty-state"><div class="empty-icon">🛡️</div><p>Loading the moderation queue…</p></div>';
+  const rows = await videoRows('select=*&status=eq.pending&order=created_at.asc&limit=100');
+  const localPending = localVideos().filter(v => v.status === 'pending');
+  localPending.forEach(v => { if (!rows.some(r => r.id === v.id)) rows.push(v); });
+  rows.forEach(r => videoCache.set(r.id, r));
+  if (!rows.length) {
+    root.innerHTML = `<div class="empty-state"><div class="empty-icon">✅</div><p>Nothing waiting. The queue is clear.</p></div>`;
+    return;
+  }
+  root.innerHTML = `<div class="card" style="border-color:rgba(245,158,11,.35);"><div style="font-weight:700;color:var(--accent3);margin-bottom:4px;">🛡️ ${rows.length} video${rows.length === 1 ? '' : 's'} waiting</div><div style="font-size:.74rem;color:var(--muted);">Approve only content that is genuinely educational, safe and correctly labelled.</div></div>` +
+    rows.map(v => `<div class="mod-item">
+      <div class="flex-between" style="gap:8px;align-items:flex-start;"><div style="font-weight:700;font-size:.88rem;">${escapeHtml(v.title)}</div><span class="vid-status vs-pending">⏳ Pending</span></div>
+      <div class="vid-meta" style="margin:5px 0;"><span>@${escapeHtml(v.username || 'student')}</span><span>${escapeHtml(v.email || 'no email')}</span><span>${escapeHtml(v.category || '')}</span></div>
+      <div style="font-size:.76rem;color:var(--muted);line-height:1.45;">${escapeHtml(v.description || v.desc || '')}</div>
+      <div style="display:flex;gap:6px;margin-top:9px;flex-wrap:wrap;"><button class="btn btn-ghost" onclick="watchVideo('${v.id}')">▶ Preview</button><button class="btn btn-accent" onclick="moderateVideo('${v.id}','approved')">✅ Approve</button><button class="btn btn-danger" onclick="moderateVideo('${v.id}','declined')">❌ Decline</button></div>
+    </div>`).join('');
+}
+async function moderateVideo(id, status) {
+  const v = videoCache.get(id) || {};
+  let note = '';
+  if (status === 'declined') {
+    note = prompt('Why is this video being declined? (the student will see this)') || '';
+    if (note === null) return;
+  }
+  if (!confirm(status === 'approved' ? 'Approve this video and publish it?' : 'Decline this video?')) return;
+  const online = !String(id).startsWith('local_');
+  if (online) {
+    try {
+      await sbReq('PATCH', '/rest/v1/video_submissions?id=eq.' + encodeURIComponent(id), {
+        status, admin_note: note, reviewed_by: localStorage.getItem('sb_uid'), reviewed_at: new Date().toISOString()
+      }, true);
+    } catch (e) { showToast('Could not update the submission: ' + e.message); return; }
+    // In-app notification for the student
+    if (v.user_id) {
+      try {
+        await sbReq('POST', '/rest/v1/notifications', {
+          user_id: v.user_id,
+          title: status === 'approved' ? '✅ Your video was approved' : '❌ Your video was declined',
+          body: (status === 'approved' ? '“' : '“') + (v.title || 'Your video') + (status === 'approved' ? '” is now live in the StudyNest video library.' : '” was not approved.' + (note ? ' Reason: ' + note : '')),
+          kind: 'video', link: 'videos'
+        }, true);
+      } catch (e) {}
+    }
+    // Email (works once RESEND_API_KEY / BREVO_API_KEY is set in Vercel)
+    if (v.email) notifyEmail(v.email, status === 'approved' ? 'Your StudyNest video was approved 🎉' : 'Your StudyNest video was reviewed', status === 'approved'
+      ? `Good news! Your video “${v.title}” has been approved and is now visible in the StudyNest video library.`
+      : `Your video “${v.title}” was not approved.${note ? '\n\nReason: ' + note : ''}\n\nYou can fix the issue and submit again.`);
+  } else {
+    const local = localVideos().map(x => x.id === id ? Object.assign({}, x, { status, admin_note: note }) : x);
+    saveLocalVideos(local);
+  }
+  showToast(status === 'approved' ? 'Video approved ✓' : 'Video declined.');
+  renderVideoTab();
+}
+async function notifyEmail(to, subject, text) {
+  try {
+    await sbCfg();
+    const h = { 'Content-Type': 'application/json' };
+    if (SB.ready && SB.tok) h.Authorization = 'Bearer ' + SB.tok;
+    await fetch('/api/notify', { method: 'POST', headers: h, body: JSON.stringify({ to, subject, text }) });
+  } catch (e) {}
+}
+
+// ---------------------------------------------------------------------
+// NOTIFICATIONS
+// ---------------------------------------------------------------------
+function notifLocal() { const n = storeGet('notif_' + currentUser.username); return Array.isArray(n) ? n : []; }
+function notifSave(list) { storeSet('notif_' + currentUser.username, list.slice(0, 120)); }
+async function notifLoad() {
+  if (!currentUser) return;
+  const uid = localStorage.getItem('sb_uid');
+  if (!uid) return;
+  try {
+    const rows = await sbGet('notifications', 'select=*&user_id=eq.' + encodeURIComponent(uid) + '&order=created_at.desc&limit=60');
+    if (!Array.isArray(rows) || !rows.length) return;
+    const local = notifLocal();
+    const known = new Set(local.map(n => n.id));
+    let changed = false;
+    rows.forEach(r => { if (!known.has(r.id)) { local.push({ id: r.id, title: r.title, body: r.body, kind: r.kind, link: r.link, read: !!r.read, created_at: r.created_at }); changed = true; } });
+    if (changed) { local.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)); notifSave(local); }
+    updateNotifBadge();
+  } catch (e) {}
+}
+function pushNotification(title, body, kind, link) {
+  if (!currentUser) return;
+  const local = notifLocal();
+  local.unshift({ id: 'n_' + uid(), title, body: body || '', kind: kind || 'info', link: link || '', read: false, created_at: new Date().toISOString() });
+  notifSave(local);
+  updateNotifBadge();
+  const uidv = localStorage.getItem('sb_uid');
+  if (uidv) {
+    sbReq('POST', '/rest/v1/notifications', { user_id: uidv, title, body: body || '', kind: kind || 'info', link: link || '' }, true).catch(() => {});
+  }
+}
+function updateNotifBadge() {
+  const el = document.getElementById('notifCount');
+  if (!el || !currentUser) return;
+  const n = notifLocal().filter(x => !x.read).length;
+  el.textContent = n > 99 ? '99+' : String(n);
+  el.style.display = n ? 'flex' : 'none';
+}
+async function notificationsModal() {
+  if (!currentUser) return;
+  await notifLoad();
+  const list = notifLocal();
+  const html = list.length ? list.map(n => `<div class="notif-item ${n.read ? '' : 'unread'}">
+      <div class="notif-dot" style="background:${n.read ? 'transparent' : 'var(--accent)'};"></div>
+      <div style="flex:1;"><div style="font-weight:${n.read ? '600' : '800'};font-size:.85rem;">${escapeHtml(n.title)}</div>
+      <div style="font-size:.75rem;color:var(--muted);line-height:1.45;margin-top:2px;">${escapeHtml(n.body)}</div>
+      <div style="font-size:.62rem;color:var(--muted);margin-top:4px;">${n.created_at ? new Date(n.created_at).toLocaleString() : ''}</div></div>
+    </div>`).join('') : '<div class="empty-state"><div class="empty-icon">🔔</div><p>No notifications yet.</p></div>';
+  openModal(`<div class="modal-title">🔔 Notifications</div><div style="max-height:60vh;overflow:auto;">${html}</div>
+    <div style="display:flex;gap:8px;margin-top:12px;"><button class="btn btn-ghost" style="flex:1;" onclick="markAllRead()">Mark all read</button><button class="btn btn-accent" style="flex:1;" onclick="closeModalDirect()">Close</button></div>`);
+  setTimeout(markAllRead, 1400);
+}
+function markAllRead() {
+  if (!currentUser) return;
+  const local = notifLocal().map(n => Object.assign({}, n, { read: true }));
+  notifSave(local); updateNotifBadge();
+  const uidv = localStorage.getItem('sb_uid');
+  if (uidv) sbReq('PATCH', '/rest/v1/notifications?user_id=eq.' + encodeURIComponent(uidv) + '&read=eq.false', { read: true }, true).catch(() => {});
+}
+
+// ---------------------------------------------------------------------
+// STREAKS + BADGES + LEVELS
+// ---------------------------------------------------------------------
+const BADGE_GROUPS = [
+  { id: 'ai', label: 'AI Explorer', icon: '🤖', items: [
+    ['ai1', 'First Spark', 'Ask the AI your first question', 1, 'ai'],
+    ['ai5', 'Curious Mind', 'Ask 5 questions', 5, 'ai'],
+    ['ai10', 'Question Machine', 'Ask 10 questions', 10, 'ai'],
+    ['ai25', 'Deep Thinker', 'Ask 25 questions', 25, 'ai'],
+    ['ai50', 'Study Buddy', 'Ask 50 questions', 50, 'ai'],
+    ['ai100', 'Century Club', 'Ask the AI 100 questions — a big milestone!', 100, 'ai'],
+    ['ai250', 'Relentless', 'Ask 250 questions', 250, 'ai'],
+    ['ai500', 'AI Marathon', 'Ask 500 questions', 500, 'ai'],
+    ['ai1000', 'Thousand Minds', 'Ask 1,000 questions', 1000, 'ai'],
+    ['ai2500', 'Tireless Scholar', 'Ask 2,500 questions', 2500, 'ai'],
+    ['ai5000', 'Legend of Questions', 'Ask 5,000 questions', 5000, 'ai'],
+    ['ai10000', 'The Oracle', 'Ask 10,000 questions', 10000, 'ai']
+  ]},
+  { id: 'streak', label: 'Streaks', icon: '🔥', items: [
+    ['st2', 'Warming Up', 'Visit 2 days in a row', 2, 'streak'],
+    ['st3', 'Three in a Row', 'Keep a 3-day streak', 3, 'streak'],
+    ['st5', 'Consistent', 'Keep a 5-day streak', 5, 'streak'],
+    ['st7', 'Week Warrior', 'Keep a 7-day streak', 7, 'streak'],
+    ['st10', 'Double Digits', 'Keep a 10-day streak', 10, 'streak'],
+    ['st14', 'Fortnight Focus', 'Keep a 14-day streak', 14, 'streak'],
+    ['st21', 'Habit Formed', 'Keep a 21-day streak', 21, 'streak'],
+    ['st30', 'Monthly Legend', 'Keep a 30-day streak', 30, 'streak'],
+    ['st50', 'Unstoppable', 'Keep a 50-day streak', 50, 'streak'],
+    ['st100', 'Hundred Days', 'Keep a 100-day streak', 100, 'streak'],
+    ['st180', 'Half Year Hero', 'Keep a 180-day streak', 180, 'streak'],
+    ['st365', 'One Full Year', 'Keep a 365-day streak', 365, 'streak']
+  ]},
+  { id: 'notes', label: 'Notes', icon: '📓', items: [
+    ['no1', 'First Page', 'Add your first note file', 1, 'notes'],
+    ['no5', 'Getting Organised', 'Add 5 note files', 5, 'notes'],
+    ['no10', 'Ten Down', 'Add 10 note files', 10, 'notes'],
+    ['no20', 'Notebook Builder', 'Add 20 note files', 20, 'notes'],
+    ['no30', 'Page Turner', 'Add 30 note files', 30, 'notes'],
+    ['no50', 'Archive Starter', 'Add 50 note files', 50, 'notes'],
+    ['no75', 'Knowledge Keeper', 'Add 75 note files', 75, 'notes'],
+    ['no100', 'Century of Notes', 'Add 100 note files', 100, 'notes'],
+    ['no150', 'Library Builder', 'Add 150 note files', 150, 'notes'],
+    ['no250', 'Master Archivist', 'Add 250 note files', 250, 'notes'],
+    ['no400', 'Note Hoarder', 'Add 400 note files', 400, 'notes'],
+    ['no600', 'The Great Archive', 'Add 600 note files', 600, 'notes']
+  ]},
+  { id: 'hw', label: 'Homework', icon: '📝', items: [
+    ['hw1', 'Done and Dusted', 'Complete your first homework task', 1, 'hw'],
+    ['hw5', 'Five for Five', 'Complete 5 homework tasks', 5, 'hw'],
+    ['hw10', 'Homework Hero', 'Complete 10 homework tasks', 10, 'hw'],
+    ['hw25', 'No More Excuses', 'Complete 25 homework tasks', 25, 'hw'],
+    ['hw50', 'Half Century', 'Complete 50 homework tasks', 50, 'hw'],
+    ['hw75', 'Task Master', 'Complete 75 homework tasks', 75, 'hw'],
+    ['hw100', 'Hundred Tasks', 'Complete 100 homework tasks', 100, 'hw'],
+    ['hw200', 'Reliable', 'Complete 200 homework tasks', 200, 'hw'],
+    ['hw350', 'Super Student', 'Complete 350 homework tasks', 350, 'hw'],
+    ['hw500', 'Unbeatable', 'Complete 500 homework tasks', 500, 'hw']
+  ]},
+  { id: 'cards', label: 'Flashcards', icon: '🃏', items: [
+    ['fc10', 'Card Shark', 'Create 10 flashcards', 10, 'cards'],
+    ['fc25', 'Memory Starter', 'Create 25 flashcards', 25, 'cards'],
+    ['fc50', 'Recall Builder', 'Create 50 flashcards', 50, 'cards'],
+    ['fc100', 'Hundred Cards', 'Create 100 flashcards', 100, 'cards'],
+    ['fc200', 'Spaced Repetition', 'Create 200 flashcards', 200, 'cards'],
+    ['fc300', 'Deck Builder', 'Create 300 flashcards', 300, 'cards'],
+    ['fc500', 'Memory Palace', 'Create 500 flashcards', 500, 'cards'],
+    ['fc750', 'Card Collector', 'Create 750 flashcards', 750, 'cards'],
+    ['fc1000', 'Thousand Cards', 'Create 1,000 flashcards', 1000, 'cards'],
+    ['fc2000', 'Encyclopaedia Brain', 'Create 2,000 flashcards', 2000, 'cards']
+  ]},
+  { id: 'quiz', label: 'Quizzes', icon: '📝', items: [
+    ['qz1', 'First Test', 'Finish your first quiz', 1, 'quiz'],
+    ['qz3', 'Test Pilot', 'Finish 3 quizzes', 3, 'quiz'],
+    ['qz5', 'Quiz Regular', 'Finish 5 quizzes', 5, 'quiz'],
+    ['qz10', 'Ten Tests', 'Finish 10 quizzes', 10, 'quiz'],
+    ['qz25', 'Exam Ready', 'Finish 25 quizzes', 25, 'quiz'],
+    ['qz50', 'Quiz Veteran', 'Finish 50 quizzes', 50, 'quiz'],
+    ['qz100', 'Century of Tests', 'Finish 100 quizzes', 100, 'quiz'],
+    ['qz250', 'Master of Tests', 'Finish 250 quizzes', 250, 'quiz']
+  ]},
+  { id: 'friends', label: 'Friends', icon: '👥', items: [
+    ['fr1', 'Not Alone', 'Make your first friend', 1, 'friends'],
+    ['fr3', 'Study Circle', 'Make 3 friends', 3, 'friends'],
+    ['fr5', 'Team Player', 'Make 5 friends', 5, 'friends'],
+    ['fr10', 'Social Scholar', 'Make 10 friends', 10, 'friends'],
+    ['fr20', 'Class Connector', 'Make 20 friends', 20, 'friends'],
+    ['fr30', 'Community Builder', 'Make 30 friends', 30, 'friends'],
+    ['fr50', 'Everybody Knows You', 'Make 50 friends', 50, 'friends'],
+    ['fr100', 'The Whole School', 'Make 100 friends', 100, 'friends']
+  ]},
+  { id: 'library', label: 'Library', icon: '📚', items: [
+    ['lb1', 'Open a Book', 'Open your first book', 1, 'library'],
+    ['lb3', 'Bookworm', 'Open 3 books', 3, 'library'],
+    ['lb5', 'Shelf Starter', 'Open 5 books', 5, 'library'],
+    ['lb10', 'Ten Books', 'Open 10 books', 10, 'library'],
+    ['lb15', 'Wide Reader', 'Open 15 books', 15, 'library'],
+    ['lb20', 'Book Explorer', 'Open 20 books', 20, 'library'],
+    ['lb30', 'Thirty Volumes', 'Open 30 books', 30, 'library'],
+    ['lb40', 'Reading Habit', 'Open 40 books', 40, 'library'],
+    ['lb50', 'Half Century Reader', 'Open 50 books', 50, 'library'],
+    ['lb60', 'Deep Reader', 'Open 60 books', 60, 'library'],
+    ['lb75', 'Well Read', 'Open 75 books', 75, 'library'],
+    ['lb100', 'Hundred Books', 'Open 100 books', 100, 'library']
+  ]},
+  { id: 'video', label: 'Videos', icon: '🎬', items: [
+    ['vd1', 'First Watch', 'Watch your first StudyNest video', 1, 'videoWatch'],
+    ['vd5', 'Five Videos', 'Watch 5 videos', 5, 'videoWatch'],
+    ['vd10', 'Video Learner', 'Watch 10 videos', 10, 'videoWatch'],
+    ['vd25', 'Screen Scholar', 'Watch 25 videos', 25, 'videoWatch'],
+    ['vd50', 'Visual Learner', 'Watch 50 videos', 50, 'videoWatch'],
+    ['vu1', 'Contributor', 'Submit your first video', 1, 'videoSubmit'],
+    ['vu3', 'Sharing Knowledge', 'Submit 3 videos', 3, 'videoSubmit'],
+    ['vu5', 'Teacher at Heart', 'Submit 5 videos', 5, 'videoSubmit'],
+    ['vu10', 'Content Creator', 'Submit 10 videos', 10, 'videoSubmit'],
+    ['va1', 'Approved!', 'Get your first video approved', 1, 'videoApproved'],
+    ['va5', 'Trusted Creator', 'Get 5 videos approved', 5, 'videoApproved']
+  ]},
+  { id: 'focus', label: 'Focus', icon: '⏱️', items: [
+    ['fo10', 'Ten Minutes', 'Focus for 10 minutes in total', 10, 'focus'],
+    ['fo30', 'Half Hour', 'Focus for 30 minutes in total', 30, 'focus'],
+    ['fo60', 'One Hour', 'Focus for 60 minutes in total', 60, 'focus'],
+    ['fo120', 'Two Hours', 'Focus for 2 hours in total', 120, 'focus'],
+    ['fo300', 'Five Hours', 'Focus for 5 hours in total', 300, 'focus'],
+    ['fo600', 'Ten Hours', 'Focus for 10 hours in total', 600, 'focus'],
+    ['fo1200', 'Twenty Hours', 'Focus for 20 hours in total', 1200, 'focus'],
+    ['fo2400', 'Forty Hours', 'Focus for 40 hours in total', 2400, 'focus'],
+    ['fo5000', 'Focus Master', 'Focus for 5,000 minutes', 5000, 'focus'],
+    ['fo10000', 'Deep Work Legend', 'Focus for 10,000 minutes', 10000, 'focus']
+  ]},
+  { id: 'profile', label: 'Profile', icon: '🪪', items: [
+    ['pr1', 'Face to the Name', 'Add a profile photo', 1, 'profilePhoto'],
+    ['pr2', 'Getting Set Up', 'Fill in 2 profile details', 2, 'profile'],
+    ['pr3', 'Halfway There', 'Fill in 3 profile details', 3, 'profile'],
+    ['pr4', 'Study Profile', 'Fill in 4 profile details', 4, 'profile'],
+    ['pr5', 'Almost Complete', 'Fill in 5 profile details', 5, 'profile'],
+    ['pr6', 'Fully Set Up', 'Complete every profile detail', 6, 'profile']
+  ]},
+  { id: 'special', label: 'Special', icon: '✨', items: [
+    ['sp-early', 'Early Bird', 'Open StudyNest before 7 AM', 1, 'early'],
+    ['sp-night', 'Night Owl', 'Study after 11 PM', 1, 'night'],
+    ['sp-weekend', 'Weekend Warrior', 'Finish a focus session on a weekend', 1, 'weekend'],
+    ['sp-seat1', 'Claimed a Seat', 'Claim a seat in the Study Room', 1, 'seats'],
+    ['sp-seat10', 'Room Regular', 'Claim a seat on 10 different days', 10, 'seats'],
+    ['sp-export', 'Own Your Data', 'Export your StudyNest data', 1, 'exports'],
+    ['sp-day1', 'Day One', 'Join StudyNest', 1, 'days'],
+    ['sp-day365', 'One Year In', 'Be part of StudyNest for a year', 365, 'days']
+  ]}
+];
+const BADGE_DEFS = [];
+BADGE_GROUPS.forEach(g => g.items.forEach(it => {
+  BADGE_DEFS.push({
+    id: it[0], group: g.id, groupLabel: g.label, groupIcon: g.icon,
+    name: it[1], desc: it[2], target: it[3], stat: it[4],
+    pts: it[5] || (Math.round(8 * Math.log2(it[3] + 1)) + 5)
+  });
+}));
+const BADGE_BY_ID = new Map(BADGE_DEFS.map(b => [b.id, b]));
+
+function streakGet() {
+  const s = storeGet('streak_' + currentUser.username) || {};
+  return { current: s.current || 0, best: s.best || 0, total: s.total || 0, last: s.last || null };
+}
+function streakSave(s) {
+  storeSet('streak_' + currentUser.username, s);
+  const uidv = localStorage.getItem('sb_uid');
+  if (uidv) {
+    sbCfg().then(() => {
+      if (!SB.ready) return;
+      fetch(SB.url + '/rest/v1/user_streaks?on_conflict=user_id', {
+        method: 'POST',
+        headers: { apikey: SB.key, Authorization: 'Bearer ' + (SB.tok || SB.key), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+        body: JSON.stringify([{ user_id: uidv, current_streak: s.current, best_streak: s.best, total_days: s.total, last_day: s.last, updated_at: new Date().toISOString() }])
+      }).catch(() => {});
+    }).catch(() => {});
+  }
+}
+function streakCheckIn() {
+  if (!currentUser) return { current: 0, best: 0, total: 0, already: true };
+  const s = streakGet(), today = dstr();
+  if (s.last === today) return Object.assign({}, s, { already: true });
+  const yesterday = dstr(new Date(Date.now() - DAY));
+  s.current = s.last === yesterday ? (s.current || 0) + 1 : 1;
+  s.best = Math.max(s.best || 0, s.current);
+  s.total = (s.total || 0) + 1;
+  s.last = today;
+  streakSave(s);
+  return Object.assign({}, s, { already: false, milestone: [3, 7, 14, 30, 50, 100, 180, 365].includes(s.current) });
+}
+function gamifyStats() {
+  const u = currentUser.username;
+  const users = storeGet('users') || {};
+  const me = users[u] || currentUser || {};
+  let notes = 0;
+  ['chemistry', 'physics', 'maths', 'english'].forEach(s => {
+    getFolders('notes', s).forEach(f => { if (Array.isArray(f.images)) notes += f.images.length; });
+  });
+  const hw = storeGet('hw_' + u) || [];
+  const hwDone = hw.filter(h => h && h.done).length;
+  const cards = (sGet('cards', []) || []).length;
+  const quiz = (sGet('quiz', []) || []).length;
+  const friends = (me.friends || []).length;
+  const lib = libProgress();
+  const libRead = Object.keys(lib.read || {}).length;
+  const vs = storeGet('vstats_' + u) || {};
+  const focus = focusTotalMinutes();
+  const st = streakGet();
+  const flags = storeGet('flags_' + u) || {};
+  const joined = me.joinedAt ? Math.max(0, Math.floor((Date.now() - me.joinedAt) / DAY)) : 0;
+  const edu = me.edu || {};
+  let profile = 0;
+  if (me.pfp) profile++;
+  if (me.age) profile++;
+  if (edu.cls) profile++;
+  if (edu.board) profile++;
+  if (edu.exam) profile++;
+  if (edu.hours) profile++;
+  return {
+    ai: storeGet('aitotal_' + u) || 0,
+    streak: st.best || st.current || 0,
+    notes, hw: hwDone, cards, quiz, friends, library: libRead,
+    videoWatch: vs.watch || 0, videoSubmit: vs.submit || 0, videoApproved: vs.approved || 0,
+    focus, profile, profilePhoto: me.pfp ? 1 : 0,
+    early: flags.early ? 1 : 0, night: flags.night ? 1 : 0, weekend: flags.weekend ? 1 : 0,
+    seats: storeGet('seatcount_' + u) || 0,
+    exports: storeGet('exportcount_' + u) || 0,
+    days: joined
+  };
+}
+function badgeOwned() { const b = storeGet('badges_' + currentUser.username); return new Set(Array.isArray(b) ? b : []); }
+function badgeSave(set) { storeSet('badges_' + currentUser.username, Array.from(set)); }
+async function badgeSync(ids) {
+  const uidv = localStorage.getItem('sb_uid');
+  if (!uidv || !ids.length) return;
+  try {
+    await sbCfg();
+    if (!SB.ready) return;
+    await fetch(SB.url + '/rest/v1/user_badges?on_conflict=user_id,badge_id', {
+      method: 'POST',
+      headers: { apikey: SB.key, Authorization: 'Bearer ' + (SB.tok || SB.key), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify(ids.map(id => ({ user_id: uidv, badge_id: id })))
+    });
+  } catch (e) {}
+}
+function gamifyXp() {
+  if (!currentUser) return 0;
+  const owned = badgeOwned();
+  let xp = storeGet('bonusxp_' + currentUser.username) || 0;
+  owned.forEach(id => { const b = BADGE_BY_ID.get(id); if (b) xp += b.pts; });
+  const st = streakGet();
+  xp += (st.best || 0) * 10;
+  xp += Math.floor(focusTotalMinutes() / 10);
+  xp += Object.keys(libProgress().read || {}).length * 5;
+  return xp;
+}
+function levelInfo() {
+  const xp = gamifyXp();
+  const level = Math.floor(Math.sqrt(xp / 40)) + 1;
+  const base = 40 * Math.pow(level - 1, 2), next = 40 * Math.pow(level, 2);
+  return { xp, level, base, next, pct: Math.max(0, Math.min(100, Math.round((xp - base) / Math.max(1, next - base) * 100))) };
+}
+let gamifyTimer = null;
+function gamifySoon(reason) {
+  if (!currentUser) return;
+  if (gamifyTimer) clearTimeout(gamifyTimer);
+  gamifyTimer = setTimeout(() => { gamifyTimer = null; try { gamifyTick(reason); } catch (e) {} }, 900);
+}
+function gamifyTick(reason) {
+  if (!currentUser) return [];
+  const stats = gamifyStats();
+  const owned = badgeOwned();
+  const newly = [];
+  BADGE_DEFS.forEach(b => {
+    if (!owned.has(b.id) && (stats[b.stat] || 0) >= b.target) { owned.add(b.id); newly.push(b); }
+  });
+  if (newly.length) {
+    badgeSave(owned);
+    badgeSync(newly.map(b => b.id));
+    newly.forEach((b, i) => {
+      setTimeout(() => toastBadge(b), i * 900);
+      pushNotification('🏅 Badge unlocked: ' + b.name, b.desc, 'badge');
+    });
+  }
+  updateNotifBadge();
+  return newly;
+}
+function toastBadge(b) {
+  const t = document.createElement('div');
+  t.style.cssText = 'position:fixed;top:70px;left:50%;transform:translateX(-50%) scale(.9);background:linear-gradient(135deg,#f59e0b,#f97316);color:#1a1200;padding:12px 18px;border-radius:16px;font-size:.82rem;font-weight:800;z-index:9999;box-shadow:0 10px 30px rgba(0,0,0,.5);transition:all .35s;max-width:88vw;text-align:center;';
+  t.innerHTML = `${b.groupIcon} Badge unlocked<br><span style="font-size:1rem;">${escapeHtml(b.name)}</span><br><span style="font-weight:600;font-size:.7rem;">${escapeHtml(b.desc)} · +${b.pts} XP</span>`;
+  document.body.appendChild(t);
+  requestAnimationFrame(() => { t.style.transform = 'translateX(-50%) scale(1)'; });
+  setTimeout(() => { t.style.opacity = '0'; t.style.transform = 'translateX(-50%) scale(.9)'; setTimeout(() => t.remove(), 400); }, 4200);
+}
+function focusDays() { const f = storeGet('focus_' + currentUser.username); return f && f.days && typeof f.days === 'object' ? f.days : {}; }
+function focusTotalMinutes() { const d = focusDays(); return Object.keys(d).reduce((a, k) => a + (Number(d[k]) || 0), 0); }
+function focusState() {
+  const f = storeGet('focus_' + currentUser.username) || {};
+  return { days: f.days || {}, sessions: f.sessions || 0, running: !!f.running, startedAt: f.startedAt || null, planned: f.planned || 25, goal: f.goal || 60 };
+}
+function focusSave(f) { storeSet('focus_' + currentUser.username, f); }
+function focusStart(minutes) {
+  const f = focusState();
+  f.running = true; f.startedAt = Date.now(); f.planned = minutes || f.planned || 25;
+  focusSave(f);
+  startFocusTicker();
+  renderRoomTab();
+}
+function focusStop() {
+  const f = focusState();
+  if (!f.running) return;
+  const mins = Math.max(0, Math.round((Date.now() - f.startedAt) / 60000));
+  const capped = Math.min(240, mins);
+  const day = dstr();
+  f.days = f.days || {};
+  f.days[day] = (Number(f.days[day]) || 0) + capped;
+  f.sessions = (f.sessions || 0) + 1;
+  f.running = false; f.startedAt = null;
+  if (new Date().getDay() === 0 || new Date().getDay() === 6) {
+    const flags = storeGet('flags_' + currentUser.username) || {};
+    flags.weekend = true; storeSet('flags_' + currentUser.username, flags);
+  }
+  focusSave(f);
+  const uidv = localStorage.getItem('sb_uid');
+  if (uidv && capped > 0) sbReq('POST', '/rest/v1/focus_sessions', { user_id: uidv, day, minutes: capped }, true).catch(() => {});
+  showToast(capped > 0 ? `🎯 ${capped} focus minute${capped === 1 ? '' : 's'} added` : 'Session ended.');
+  try { gamifyTick('focus'); } catch (e) {}
+  renderRoomTab();
+}
+let focusTicker = null;
+function startFocusTicker() {
+  if (focusTicker) return;
+  focusTicker = setInterval(() => {
+    const f = focusState();
+    if (!f.running) { clearInterval(focusTicker); focusTicker = null; return; }
+    const el = document.getElementById('focusTime');
+    if (el) el.textContent = focusClock();
+    const p = document.getElementById('pageSeating');
+    if (!p || !p.classList.contains('active') || currentRoomTab !== 'focus') { clearInterval(focusTicker); focusTicker = null; }
+  }, 1000);
+}
+function focusClock() {
+  const f = focusState();
+  if (!f.running) return String((f.planned || 25)).padStart(2, '0') + ':00';
+  const elapsed = Math.floor((Date.now() - f.startedAt) / 1000);
+  const total = (f.planned || 25) * 60;
+  const left = Math.max(0, total - elapsed);
+  return String(Math.floor(left / 60)).padStart(2, '0') + ':' + String(left % 60).padStart(2, '0');
+}
+
+// Daily surprise — once per day, a random locked badge from the fun pool.
+const SURPRISE_POOL = ['sp-early', 'sp-night', 'sp-weekend', 'sp-seat1', 'no5', 'ai5', 'st2', 'fr1', 'lb1', 'fc10', 'hw5', 'vd1'];
+function dailySurprise(force) {
+  if (!currentUser) return;
+  const key = 'surpriseDay_' + currentUser.username;
+  const today = dstr();
+  if (!force && storeGet(key) === today) return;
+  storeSet(key, today);
+  const owned = badgeOwned();
+  const candidates = SURPRISE_POOL.filter(id => !owned.has(id));
+  const badge = candidates.length ? BADGE_BY_ID.get(candidates[Math.floor(Math.random() * candidates.length)]) : null;
+  if (badge) {
+    owned.add(badge.id); badgeSave(owned); badgeSync([badge.id]);
+    const bonus = storeGet('bonusxp_' + currentUser.username) || 0;
+    storeSet('bonusxp_' + currentUser.username, bonus + 15);
+    openModal(`<div style="text-align:center;padding:8px 4px;">
+      <div style="font-size:3rem;">🎁</div>
+      <div style="font-weight:900;font-size:1.15rem;margin:6px 0 4px;color:var(--accent3);">A surprise reward!</div>
+      <div style="font-size:.84rem;color:var(--muted);line-height:1.55;">You found <b style="color:var(--text);">${badge.groupIcon} ${escapeHtml(badge.name)}</b><br>${escapeHtml(badge.desc)}</div>
+      <div style="margin-top:10px;" class="goal-chip">+${badge.pts} badge XP · +15 bonus XP</div>
+      <button class="btn btn-accent w-full mt-16" onclick="closeModalDirect();renderAwards();">Collect reward</button>
+    </div>`);
+    pushNotification('🎁 Surprise reward: ' + badge.name, badge.desc, 'surprise');
+  } else {
+    const bonus = storeGet('bonusxp_' + currentUser.username) || 0;
+    storeSet('bonusxp_' + currentUser.username, bonus + 25);
+    openModal(`<div style="text-align:center;padding:8px 4px;"><div style="font-size:3rem;">🎁</div><div style="font-weight:900;font-size:1.1rem;margin:6px 0 4px;color:var(--accent3);">A surprise reward!</div><div style="font-size:.84rem;color:var(--muted);">You already own every surprise badge, so here is <b style="color:var(--text);">+25 bonus XP</b> instead.</div><button class="btn btn-accent w-full mt-16" onclick="closeModalDirect()">Collect</button></div>`);
+  }
+}
+function initGamification() {
+  if (!currentUser) return;
+  const u = currentUser.username;
+  const flags = storeGet('flags_' + u) || {};
+  const h = new Date().getHours();
+  if (h < 7) flags.early = true;
+  if (h >= 23) flags.night = true;
+  storeSet('flags_' + u, flags);
+  const res = streakCheckIn();
+  try { gamifyTick('init'); } catch (e) {}
+  notifLoad();
+  updateNotifBadge();
+  if (!res.already) {
+    setTimeout(() => {
+      if (res.milestone) {
+        openModal(`<div style="text-align:center;padding:8px 4px;"><div style="font-size:3rem;">🔥</div><div style="font-weight:900;font-size:1.2rem;color:var(--accent3);margin:4px 0;">${res.current}-day streak!</div><div style="font-size:.84rem;color:var(--muted);line-height:1.55;">You showed up ${res.current} days in a row. That is how progress actually happens.</div><button class="btn btn-accent w-full mt-16" onclick="closeModalDirect();dailySurprise(true);">Open your reward 🎁</button></div>`);
+      } else {
+        setTimeout(() => { try { dailySurprise(false); } catch (e) {} }, 1800);
+      }
+    }, 1200);
+  }
+}
+
+// ---------------------------------------------------------------------
+// AWARDS PAGE
+// ---------------------------------------------------------------------
+let currentAwardsTab = 'streak';
+let badgeFilter = 'all';
+function awardsTab(t) {
+  currentAwardsTab = t;
+  ['streak', 'badges', 'inbox'].forEach(k => {
+    const el = document.getElementById('awTab' + k.charAt(0).toUpperCase() + k.slice(1));
+    if (el) el.classList.toggle('on', k === t);
+  });
+  renderAwards();
+}
+function renderAwards() {
+  const root = document.getElementById('awardsRoot');
+  if (!root || !currentUser) return;
+  if (currentAwardsTab === 'streak') renderAwardsStreak(root);
+  else if (currentAwardsTab === 'badges') renderAwardsBadges(root);
+  else renderAwardsInbox(root);
+}
+function renderAwardsStreak(root) {
+  const st = streakGet(), lvl = levelInfo(), stats = gamifyStats();
+  // Build a real last-7-days strip from the streak end date.
+  const lastMid = st.last ? new Date(st.last + 'T00:00:00').getTime() : null;
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i));
+    const ds = dstr(d);
+    const dMid = new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime();
+    const hit = lastMid != null && dMid <= lastMid && (lastMid - dMid) / DAY < (st.current || 0);
+    const isToday = ds === dstr();
+    return `<div class="week-dot ${hit ? 'done' : ''} ${isToday ? 'today' : ''}">${['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()]}</div>`;
+  }).join('');
+  const owned = badgeOwned();
+  const nextBadges = BADGE_DEFS.filter(b => !owned.has(b.id)).map(b => ({ b, left: Math.max(1, b.target - (stats[b.stat] || 0)) })).sort((a, c) => a.left - c.left).slice(0, 3);
+  root.innerHTML = `
+    <div class="streak-hero">
+      <div class="streak-flame">${st.current ? '🔥' : '🕯️'}</div>
+      <div class="streak-num">${st.current}</div>
+      <div class="streak-cap">day streak · best ${st.best} · ${st.total} total days</div>
+      <div class="week-dots">${week}</div>
+      <button class="btn btn-accent w-full mt-12" onclick="checkInNow()">${st.last === dstr() ? '✅ Checked in today' : '✅ Check in for today'}</button>
+    </div>
+    <div class="card">
+      <div class="flex-between"><div style="font-weight:700;">Level ${lvl.level}</div><div style="font-size:.75rem;color:var(--muted);">${lvl.xp} XP</div></div>
+      <div class="lvl-bar"><div style="width:${lvl.pct}%;"></div></div>
+      <div style="font-size:.7rem;color:var(--muted);">${Math.max(0, lvl.next - lvl.xp)} XP to level ${lvl.level + 1}</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:12px;text-align:center;">
+        <div><b style="color:var(--accent);">${owned.size}</b><div style="font-size:.62rem;color:var(--muted);">badges</div></div>
+        <div><b style="color:var(--accent3);">${stats.focus}</b><div style="font-size:.62rem;color:var(--muted);">focus min</div></div>
+        <div><b style="color:var(--accent2);">${stats.ai}</b><div style="font-size:.62rem;color:var(--muted);">AI questions</div></div>
+      </div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;margin-bottom:8px;">🎯 Closest rewards</div>
+      ${nextBadges.map(({ b, left }) => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;border-top:1px solid var(--border);">
+        <div style="font-size:1.4rem;filter:grayscale(1);opacity:.6;">${b.groupIcon}</div>
+        <div style="flex:1;"><div style="font-weight:600;font-size:.82rem;">${escapeHtml(b.name)}</div><div style="font-size:.68rem;color:var(--muted);">${left} more to go</div></div>
+        <div style="font-size:.65rem;color:var(--accent3);font-weight:800;">+${b.pts} XP</div>
+      </div>`).join('') || '<div style="font-size:.8rem;color:var(--muted);">Every badge earned. Incredible.</div>'}
+    </div>
+    <div class="card" style="background:linear-gradient(140deg,rgba(245,158,11,.12),rgba(124,58,237,.1));border-color:rgba(245,158,11,.3);">
+      <div style="font-weight:700;margin-bottom:4px;">🎁 Today's surprise</div>
+      <div style="font-size:.76rem;color:var(--muted);line-height:1.5;margin-bottom:10px;">A random reward waits for you once a day. Check in, keep the streak alive, and open it.</div>
+      <button class="btn btn-accent w-full" onclick="dailySurprise(true)">Open today's surprise</button>
+    </div>`;
+}
+function checkInNow() {
+  const res = streakCheckIn();
+  if (res.already) { showToast('Already checked in today — come back tomorrow!'); return; }
+  showToast(`🔥 ${res.current}-day streak!`);
+  try { gamifyTick('checkin'); } catch (e) {}
+  renderAwards();
+  if (res.milestone) setTimeout(() => dailySurprise(true), 500);
+}
+function renderAwardsBadges(root) {
+  const owned = badgeOwned(), stats = gamifyStats();
+  const groups = [['all', '✨ All']].concat(BADGE_GROUPS.map(g => [g.id, g.icon + ' ' + g.label]));
+  const filters = groups.map(g => `<button class="pill ${badgeFilter === g[0] ? 'selected' : ''}" onclick="setBadgeFilter('${g[0]}')">${g[1]}</button>`).join('');
+  const list = BADGE_DEFS.filter(b => badgeFilter === 'all' || b.group === badgeFilter);
+  const cards = list.map(b => {
+    const have = owned.has(b.id), cur = Math.min(b.target, stats[b.stat] || 0);
+    return `<div class="badge-card ${have ? 'earned' : ''}" onclick="badgeDetail('${b.id}')">
+      <div class="badge-pts">+${b.pts}</div>
+      <div class="badge-ico">${b.groupIcon}</div>
+      <div class="badge-name">${escapeHtml(b.name)}</div>
+      <div class="badge-prog">${have ? 'Earned ✓' : cur + ' / ' + b.target}</div>
+    </div>`;
+  }).join('');
+  root.innerHTML = `
+    <div class="card" style="padding:12px;display:flex;align-items:center;gap:10px;">
+      <div style="font-size:1.8rem;">🏅</div>
+      <div style="flex:1;"><div style="font-weight:800;">${owned.size} of ${BADGE_DEFS.length} badges</div><div style="height:7px;background:var(--border);border-radius:5px;margin-top:5px;overflow:hidden;"><div style="height:100%;width:${Math.round(owned.size / BADGE_DEFS.length * 100)}%;background:linear-gradient(90deg,var(--accent3),#f97316);"></div></div></div>
+    </div>
+    <div class="badge-filter">${filters}</div>
+    <div class="badge-grid">${cards}</div>`;
+}
+function setBadgeFilter(f) { badgeFilter = f; renderAwards(); }
+function badgeDetail(id) {
+  const b = BADGE_BY_ID.get(id); if (!b) return;
+  const owned = badgeOwned(), stats = gamifyStats(), have = owned.has(id), cur = Math.min(b.target, stats[b.stat] || 0);
+  openModal(`<div style="text-align:center;padding:6px 4px;">
+    <div style="font-size:3.2rem;${have ? '' : 'filter:grayscale(1);opacity:.5;'}">${b.groupIcon}</div>
+    <div style="font-weight:900;font-size:1.1rem;margin:4px 0 2px;">${escapeHtml(b.name)}</div>
+    <div style="font-size:.78rem;color:var(--muted);">${escapeHtml(b.desc)}</div>
+    <div style="margin:10px 0 6px;" class="goal-chip">${have ? '✅ Earned' : cur + ' / ' + b.target}</div>
+    <div style="height:8px;background:var(--border);border-radius:5px;overflow:hidden;margin-bottom:10px;"><div style="height:100%;width:${Math.round(cur / b.target * 100)}%;background:var(--accent);"></div></div>
+    <div style="font-size:.7rem;color:var(--muted);">${escapeHtml(b.groupLabel)} · worth ${b.pts} XP</div>
+    <button class="btn btn-accent w-full mt-16" onclick="closeModalDirect()">Close</button>
+  </div>`);
+}
+async function renderAwardsInbox(root) {
+  root.innerHTML = '<div class="empty-state"><div class="empty-icon">🔔</div><p>Loading…</p></div>';
+  await notifLoad();
+  const list = notifLocal();
+  root.innerHTML = list.length ? list.map(n => `<div class="card" style="padding:12px;${n.read ? '' : 'border-color:rgba(0,245,200,.3);'}">
+      <div class="flex-between" style="gap:8px;"><div style="font-weight:700;font-size:.85rem;">${escapeHtml(n.title)}</div><span style="font-size:.6rem;color:var(--muted);">${n.created_at ? new Date(n.created_at).toLocaleDateString() : ''}</span></div>
+      <div style="font-size:.76rem;color:var(--muted);line-height:1.5;margin-top:4px;">${escapeHtml(n.body)}</div>
+    </div>`).join('') : `<div class="empty-state"><div class="empty-icon">🔔</div><p>Nothing here yet. Earn a badge or get a video approved and it will appear here.</p></div>`;
+  markAllRead();
+}
+
+// ---------------------------------------------------------------------
+// STUDY ROOM (seats + focus + room)
+// ---------------------------------------------------------------------
+let currentRoomTab = 'seat';
+function roomTab(t) {
+  currentRoomTab = t;
+  ['seat', 'focus', 'room'].forEach(k => {
+    const el = document.getElementById('roomTab' + k.charAt(0).toUpperCase() + k.slice(1));
+    if (el) el.classList.toggle('on', k === t);
+  });
+  renderRoomTab();
+}
+function renderRoomTab() {
+  if (!currentUser) return;
+  const body = document.getElementById('roomBody');
+  if (!body) return;
+  if (currentRoomTab === 'focus') return renderFocusTab(body);
+  if (currentRoomTab === 'room') return renderRoomList(body);
+  renderSeatTab(body);
+}
+function seatToday() {
+  const { dayName, dayNum } = getSeatDay();
+  return { dayName, dayNum, key: 'seats_' + dayNum, seats: storeGet('seats_' + dayNum) || {} };
+}
+function renderSeatTab(body) {
+  const { dayName, dayNum, seats } = seatToday();
+  const users = storeGet('users') || {};
+  const st = streakGet();
+  let grid = '';
+  for (let r = 0; r < SEAT_ROWS; r++) {
+    for (let c = 0; c < SEAT_COLS; c++) {
+      const sid = r + '_' + c, occupant = seats[sid], isMine = occupant === currentUser.username, isTaken = occupant && !isMine;
+      const occName = occupant ? ((users[occupant] && users[occupant].name) ? users[occupant].name.split(' ')[0] : occupant) : '';
+      grid += `<div class="seat ${isMine ? 'mine' : ''} ${isTaken ? 'taken' : ''}" onclick="claimSeat('${sid}')">
+        <span class="seat-icon">${isMine ? '🟢' : isTaken ? '🟣' : '⬛'}</span>
+        <span class="seat-name">${isMine ? 'You' : escapeHtml(occName)}</span>
+        <span style="font-size:0.6rem;color:var(--muted);">R${r + 1}C${c + 1}</span>
+      </div>`;
+    }
+  }
+  body.innerHTML = `
+    <div class="day-indicator">📅 ${dayName} · Group ${dayNum % 2 === 0 ? 'A' : 'B'} · refreshes daily</div>
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:10px;"><div style="font-weight:700;font-size:.88rem;">Pick your seat for today</div><span class="goal-chip">🔥 ${st.current}-day streak</span></div>
+      <div style="font-size:0.78rem;color:var(--muted);margin-bottom:12px;">Tap an empty seat to claim it. Everyone in the room can see who is studying where today.</div>
+      <div class="seating-grid">${grid}</div>
+      <div style="display:flex;gap:12px;font-size:0.74rem;color:var(--muted);margin-top:12px;"><span>🟢 Your seat</span><span>🟣 Taken</span><span>⬛ Empty</span></div>
+    </div>
+    <div class="card" style="background:linear-gradient(140deg,rgba(0,245,200,.09),rgba(124,58,237,.1));border-color:rgba(0,245,200,.25);">
+      <div style="font-weight:700;font-size:.88rem;margin-bottom:4px;">⏱️ Make the seat count</div>
+      <div style="font-size:.76rem;color:var(--muted);line-height:1.5;margin-bottom:10px;">A seat is just a place. Start a focus session and turn it into real study time.</div>
+      <button class="btn btn-accent w-full" onclick="roomTab('focus')">Start focusing</button>
+    </div>`;
+}
+function renderFocusTab(body) {
+  const f = focusState(), today = Number((f.days || {})[dstr()] || 0), goal = f.goal || 60;
+  const pct = Math.min(100, Math.round(today / goal * 100));
+  const week = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(); d.setDate(d.getDate() - (6 - i));
+    const ds = dstr(d), m = Number((f.days || {})[ds] || 0);
+    return { ds, m, label: ['S', 'M', 'T', 'W', 'T', 'F', 'S'][d.getDay()] };
+  });
+  const max = Math.max(30, ...week.map(w => w.m));
+  const bars = week.map(w => `<div style="flex:1;text-align:center;"><div class="focus-bar"><i style="height:${Math.max(3, Math.round(w.m / max * 68))}px;"></i></div><div class="focus-day">${w.label}</div></div>`).join('');
+  const remaining = Math.max(0, goal - today);
+  body.innerHTML = `
+    <div class="card" style="text-align:center;">
+      <div class="focus-ring">
+        <svg width="210" height="210"><circle cx="105" cy="105" r="92" fill="none" stroke="var(--border)" stroke-width="12"></circle>
+          <circle cx="105" cy="105" r="92" fill="none" stroke="url(#fg)" stroke-width="12" stroke-linecap="round" stroke-dasharray="578" stroke-dashoffset="${578 - 578 * (f.running ? 0.35 : pct / 100)}"></circle>
+          <defs><linearGradient id="fg" x1="0" y1="0" x2="1" y2="1"><stop offset="0%" stop-color="#00f5c8"></stop><stop offset="100%" stop-color="#7c3aed"></stop></linearGradient></defs>
+        </svg>
+        <div class="focus-inner"><div class="focus-time" id="focusTime">${focusClock()}</div><div class="focus-label">${f.running ? 'focusing now' : today + ' / ' + goal + ' min today'}</div></div>
+      </div>
+      <div class="focus-presets">${[15, 25, 50].map(m => `<button class="focus-preset ${f.planned === m ? 'on' : ''}" onclick="focusPick(${m})">${m} min</button>`).join('')}</div>
+      <div style="display:flex;gap:8px;">
+        ${f.running
+          ? `<button class="btn btn-danger" style="flex:1;" onclick="focusStop()">⏹ End session</button>`
+          : `<button class="btn btn-accent" style="flex:1;" onclick="focusStart(${f.planned || 25})">▶ Start ${f.planned || 25}-minute focus</button>`}
+      </div>
+      <div style="font-size:.72rem;color:var(--muted);margin-top:8px;">${remaining ? remaining + ' minutes left to hit today\'s goal' : '🎉 Daily focus goal complete!'}</div>
+    </div>
+    <div class="card">
+      <div class="flex-between" style="margin-bottom:8px;"><div style="font-weight:700;font-size:.86rem;">Today's focus</div><span class="goal-chip">${pct}% of goal</span></div>
+      <div class="lvl-bar"><div style="width:${pct}%;"></div></div>
+      <div style="display:flex;justify-content:space-between;font-size:.72rem;color:var(--muted);margin-top:6px;"><span>${today} min today</span><span>${focusTotalMinutes()} min all-time</span></div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;font-size:.86rem;margin-bottom:4px;">Last 7 days</div>
+      <div class="focus-week">${bars}</div>
+      <div style="font-size:.7rem;color:var(--muted);text-align:center;margin-top:6px;">Total this week: ${week.reduce((a, w) => a + w.m, 0)} min</div>
+    </div>
+    <div class="card" style="font-size:.76rem;color:var(--muted);line-height:1.6;"><b style="color:var(--text);">How focus points work</b><br>Start a session, put the phone down, and tap End when you finish. Minutes are saved to your account and count toward focus badges. A 25-minute session with a 5-minute break is the classic Pomodoro rhythm.</div>`;
+  if (f.running) startFocusTicker();
+}
+function focusPick(m) {
+  const f = focusState();
+  if (f.running) { showToast('End the current session first.'); return; }
+  f.planned = m; focusSave(f); renderFocusTab(document.getElementById('roomBody'));
+}
+function renderRoomList(body) {
+  const { seats } = seatToday();
+  const users = storeGet('users') || {};
+  const occupants = Object.keys(seats).map(sid => ({ sid, username: seats[sid], name: (users[seats[sid]] || {}).name || seats[sid], pfp: (users[seats[sid]] || {}).pfp }))
+    .sort((a, b) => a.sid.localeCompare(b.sid));
+  const st = streakGet();
+  const focusToday = Number((focusState().days || {})[dstr()] || 0);
+  const friends = new Set(((users[currentUser.username] || {}).friends) || []);
+  const buddies = occupants.filter(o => o.username !== currentUser.username).slice(0, 4);
+  body.innerHTML = `
+    <div class="lib-stats">
+      <div class="lib-stat"><b>${occupants.length}</b><span>in the room</span></div>
+      <div class="lib-stat"><b>${st.current}</b><span>day streak</span></div>
+      <div class="lib-stat"><b>${focusToday}</b><span>min focused</span></div>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;font-size:.88rem;margin-bottom:8px;">👥 Studying here today</div>
+      ${occupants.length ? occupants.map(o => `<div class="room-person">
+        <div class="user-avatar">${o.pfp ? `<img src="${o.pfp}">` : escapeHtml((o.name || 'U')[0].toUpperCase())}</div>
+        <div style="flex:1;"><div style="font-weight:600;font-size:.84rem;">${escapeHtml(o.name)} ${o.username === currentUser.username ? '(you)' : ''}</div>
+        <div style="font-size:.68rem;color:var(--muted);">Seat R${Number(o.sid.split('_')[0]) + 1}C${Number(o.sid.split('_')[1]) + 1}${friends.has(o.username) ? ' · friend' : ''}</div></div>
+        ${o.username !== currentUser.username ? `<button class="ai-mini-btn" onclick="sayHi('${escapeHtml(o.username)}')">👋 Say hi</button>` : ''}
+      </div>`).join('') : `<div style="font-size:.8rem;color:var(--muted);padding:10px 0;">Nobody has claimed a seat yet. Be the first.</div>`}
+      <button class="btn btn-ghost w-full mt-12" onclick="roomTab('seat')">🪑 Claim a seat</button>
+    </div>
+    <div class="card">
+      <div style="font-weight:700;font-size:.88rem;margin-bottom:6px;">🤝 Study buddies</div>
+      ${buddies.length ? buddies.map(o => `<div class="room-person"><div class="user-avatar">${o.pfp ? `<img src="${o.pfp}">` : escapeHtml((o.name || 'U')[0].toUpperCase())}</div><div style="flex:1;"><div style="font-weight:600;font-size:.84rem;">${escapeHtml(o.name)}</div><div style="font-size:.68rem;color:var(--muted);">Also in the room right now</div></div><button class="ai-mini-btn" onclick="sayHi('${escapeHtml(o.username)}')">Message</button></div>`).join('') : '<div style="font-size:.8rem;color:var(--muted);">Claim a seat and invite a friend — buddies appear here when they join the room.</div>'}
+    </div>
+    <div class="card" style="background:linear-gradient(140deg,rgba(124,58,237,.12),rgba(0,245,200,.08));border-color:rgba(124,58,237,.3);">
+      <div style="font-weight:700;font-size:.88rem;margin-bottom:4px;">📌 Room rules</div>
+      <div style="font-size:.76rem;color:var(--muted);line-height:1.6;">• One seat per person, refreshed daily.<br>• Keep the chat friendly and on-topic.<br>• Use Focus mode while you study — it counts toward your badges.<br>• Report anything inappropriate from the Friends tab.</div>
+    </div>`;
+}
+function sayHi(username) {
+  const users = storeGet('users') || {};
+  if (!users[username]) { showToast('That student is not available right now.'); return; }
+  if (!(users[currentUser.username].friends || []).includes(username)) {
+    showToast('Add them as a friend first, then message them.');
+    showPage('pageFriends', document.querySelector('.nav-item[onclick*="pageFriends"]'));
+    return;
+  }
+  showPage('pageFriends', document.querySelector('.nav-item[onclick*="pageFriends"]'));
+  setTimeout(() => { try { openChat(username); } catch (e) { showToast('Open Chats to message them.'); } }, 200);
 }
 
 // ===== MODAL =====
