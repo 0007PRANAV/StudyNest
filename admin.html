@@ -112,6 +112,7 @@
     .form-full { grid-column: 1 / -1; }
 
     .login-wrap { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; background: #0d1117; }
+    #loginScreen { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: 24px; background: radial-gradient(1200px 600px at 50% -10%, #16233a 0%, #0d1117 60%); }
     .login-card { background: #161b22; border: 1px solid #30363d; border-radius: 16px; padding: 40px; width: 100%; max-width: 400px; }
     .login-title { font-size: 1.5rem; font-weight: 800; color: #e6edf3; margin-bottom: 8px; text-align: center; }
     .login-sub { color: #8b949e; text-align: center; margin-bottom: 28px; font-size: 0.9rem; }
@@ -163,6 +164,12 @@
     .btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .lock-tag { display: inline-flex; align-items: center; gap: 5px; font-size: 0.72rem; color: #8b949e; background: #21262d; border: 1px solid #30363d; border-radius: 6px; padding: 4px 8px; }
     .table-wrap th { position: sticky; top: 0; z-index: 1; }
+
+    /* Password field with show/hide */
+    .pass-wrap { position: relative; }
+    .pass-wrap input { padding-right: 44px; }
+    .pass-toggle { position: absolute; top: 50%; right: 8px; transform: translateY(-50%); background: none; border: none; color: #8b949e; font-size: 1rem; padding: 6px; line-height: 1; border-radius: 6px; }
+    .pass-toggle:hover { color: #e6edf3; background: #21262d; }
   </style>
 </head>
 <body>
@@ -171,16 +178,22 @@
   <div class="login-card">
     <div class="login-title">🔐 Admin Login</div>
     <div class="login-sub">StudyNest administrator access</div>
-    <form id="adminLoginForm">
+    <form id="adminLoginForm" onsubmit="event.preventDefault(); doAdminLogin();">
       <label>Email</label>
-      <input type="email" id="loginEmail" placeholder="admin@studynest.local" required>
+      <input type="email" id="loginEmail" placeholder="you@gmail.com" autocomplete="username" required>
       <label style="margin-top: 14px;">Password</label>
-      <input type="password" id="loginPass" placeholder="••••••••" required>
+      <div class="pass-wrap">
+        <input type="password" id="loginPass" placeholder="••••••••" autocomplete="current-password" required>
+        <button type="button" class="pass-toggle" onclick="togglePass()" aria-label="Show password" title="Show password">👁</button>
+      </div>
       <div id="loginErr" class="text-danger"></div>
-      <button class="btn btn-primary w-full mt-16" type="button" onclick="doAdminLogin()">Sign In</button>
+      <button class="btn btn-primary w-full mt-16" type="submit" id="loginBtn">Sign In</button>
     </form>
     <div style="margin-top: 20px; font-size: 0.8rem; color: #8b949e; text-align: center;">
       Not an admin? Contact your StudyNest administrator.
+    </div>
+    <div style="margin-top: 10px; font-size: 0.72rem; color: #6b7280; text-align: center;">
+      Use your full email address, not your username.
     </div>
   </div>
 </div>
@@ -532,10 +545,31 @@ async function apiDelete(path, auth = true) {
 }
 
 // ===== AUTH =====
-async function doAdminLogin() {
-  const email = document.getElementById('loginEmail').value.trim();
-  const pass = document.getElementById('loginPass').value;
+function togglePass() {
+  const p = document.getElementById('loginPass');
+  if (!p) return;
+  p.type = p.type === 'password' ? 'text' : 'password';
+}
+function loginError(msg) {
   const err = document.getElementById('loginErr');
+  if (!err) return;
+  err.textContent = msg || '';
+  err.style.display = msg ? 'block' : 'none';
+}
+async function doAdminLogin() {
+  const emailEl = document.getElementById('loginEmail');
+  const passEl = document.getElementById('loginPass');
+  const btn = document.getElementById('loginBtn');
+  const email = (emailEl.value || '').trim().toLowerCase();
+  const pass = passEl.value;
+  loginError('');
+  if (!email || !pass) { loginError('Enter your email and password.'); return; }
+  if (!email.includes('@')) {
+    loginError('Please use your full email address (e.g. you@gmail.com), not your username.');
+    emailEl.focus();
+    return;
+  }
+  if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'Signing in…'; }
   try {
     const d = await apiPost('/auth/v1/token?grant_type=password', { email, password: pass }, false);
     adminToken = d.access_token;
@@ -544,12 +578,11 @@ async function doAdminLogin() {
     // Verify admin role
     const prof = await apiGet('/rest/v1/profiles?select=role&id=eq.' + d.user.id);
     if (!prof.length || prof[0].role !== 'admin') {
-      await apiPost('/auth/v1/logout', {}, true);
+      await apiPost('/auth/v1/logout', {}, true).catch(() => {});
       localStorage.removeItem('admin_token');
       adminToken = '';
       adminUser = null;
-      err.textContent = 'Admin access required.';
-      err.style.display = 'block';
+      loginError('This account is not an administrator.');
       return;
     }
     document.getElementById('loginScreen').style.display = 'none';
@@ -559,8 +592,18 @@ async function doAdminLogin() {
     showPage('pageDashboard', document.querySelector('.nav-item'));
     loadAll();
   } catch (e) {
-    err.textContent = e.message || 'Login failed.';
-    err.style.display = 'block';
+    const msg = String((e && e.message) || '');
+    if (/invalid_credentials|Invalid login credentials/i.test(msg)) {
+      loginError('Wrong email or password. Check for extra spaces and try again.');
+    } else if (/Email not confirmed/i.test(msg)) {
+      loginError('This email is not confirmed yet. Confirm it in Supabase → Authentication → Users.');
+    } else if (/rate limit|too many/i.test(msg)) {
+      loginError('Too many attempts. Wait a minute and try again.');
+    } else {
+      loginError('Login failed: ' + msg.replace(/^API \d+\s*/, '').slice(0, 160));
+    }
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label || 'Sign In'; }
   }
 }
 function applyAdminIdentity() {
