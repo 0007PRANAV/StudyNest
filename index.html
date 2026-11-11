@@ -3482,7 +3482,7 @@ async function renderAdminPanel() {
   try {
     const users = await sbGetProfiles();
     const reports = await sbReq('GET', '/rest/v1/reports?select=*,reporter:profiles!reporter_id(name,username),reported:profiles!reported_id(name,username)&order=created_at.desc&limit=20', null, true) || [];
-    panel.innerHTML = `<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;"><div style="font-weight:700;color:var(--accent3);">⚡ Admin Panel</div><a href="/admin" target="_blank" rel="noopener" style="font-size:0.75rem;color:var(--accent);">Open full dashboard ↗</a></div>
+    panel.innerHTML = `<div class="card"><div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:12px;"><div style="font-weight:700;color:var(--accent3);">⚡ Admin Panel</div><a href="https://studynest-admin.vercel.app/" target="_blank" rel="noopener" style="font-size:0.75rem;color:var(--accent);">Open full dashboard ↗</a></div>
       <div style="font-weight:600;margin-bottom:8px;">👥 Users (${users.length})</div>
       ${users.map(u => `<div class="action-sheet-item" style="font-size:0.85rem;">
         <div><div style="font-weight:600;">${escapeHtml(u.name || u.username)}</div><div style="font-size:0.72rem;color:var(--muted);">@${escapeHtml(u.username)} · ${u.role}</div></div>
