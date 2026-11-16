@@ -337,6 +337,7 @@
   .lib-actions { display: flex; gap: 5px; }
   .lib-actions button, .lib-actions a { flex: 1; text-align: center; padding: 7px 4px; border-radius: 10px; font-size: .68rem; font-weight: 700; border: none; cursor: pointer; text-decoration: none; }
   .lib-open { background: var(--accent); color: #0f0f1a; }
+  .lib-pdf { background: rgba(239,68,68,.18); color: #f87171; }
   .lib-save { background: rgba(124,58,237,.18); color: #a78bfa; }
   .lib-save.on { background: var(--accent3); color: #0f0f1a; }
   .lib-done { position: absolute; top: 6px; left: 6px; background: var(--success); color: #04130a; font-size: .58rem; font-weight: 800; padding: 2px 7px; border-radius: 9px; }
@@ -766,6 +767,11 @@ function storeSet(key, val) {
 // notes, chats, homework and AI history on every device and in every tab.
 let cloudSyncTimer = null;
 const cloudSyncDirty = new Set();
+// Storage guard: Supabase Free gives 500 MB. Text records are tiny, but a runaway
+// key (e.g. a giant note or an AI transcript) must never be able to bloat the DB.
+// Anything over this size stays on the device only.
+const SYNC_MAX_BYTES = 64 * 1024;
+const syncOversizeKeys = new Set();
 
 function syncKeyAllowed(key) {
   if (!key || typeof key !== 'string') return false;
@@ -797,6 +803,14 @@ async function flushCloudSync() {
     for (const k of keys) {
       const raw = localStorage.getItem('sn_' + k);
       if (raw == null) continue;
+      if (raw.length > SYNC_MAX_BYTES) {
+        // Too large for the shared cloud store: keep it local, stop retrying it.
+        syncOversizeKeys.add(k);
+        cloudSyncDirty.delete(k);
+        console.info('Kept local-only (over ' + Math.round(SYNC_MAX_BYTES / 1024) + ' KB): ' + k);
+        continue;
+      }
+      syncOversizeKeys.delete(k);
       let value;
       try { value = JSON.parse(raw); } catch(e) { continue; }
       rows.push({ user_id: uid, key: 'sn_' + k, value, updated_at: now });
@@ -844,6 +858,29 @@ async function pullCloudData() {
   } catch(e) { console.warn('Cloud pull error:', e); return false; }
 }
 
+// Housekeeping that keeps both the browser cache and the Supabase rows small.
+// Runs once per session; never deletes anything a user can still see.
+function pruneLocalData() {
+  if (!currentUser) return;
+  try {
+    // 1. Notifications: keep the newest 60 per account (notifSave caps at 120).
+    const list = notifLocal();
+    if (Array.isArray(list) && list.length > 60) {
+      list.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+      notifSave(list.slice(0, 60));
+    }
+  } catch (e) {}
+  try {
+    // 2. Quiz history: keep the newest 50 attempts.
+    const q = sGet('quiz', []);
+    if (Array.isArray(q) && q.length > 50) sSet('quiz', q.slice(-50));
+  } catch (e) {}
+  try {
+    // 3. Drop oversized keys from the sync queue so they stop being retried.
+    syncOversizeKeys.forEach(k => cloudSyncDirty.delete(k));
+  } catch (e) {}
+}
+
 // Merge the cloud copy of the signed-in profile into the local users record.
 function applySyncedProfile() {
   if (!currentUser || !currentUser.username) return;
@@ -875,6 +912,7 @@ async function deleteCloudData() {
 let cloudPollTimer = null;
 function startCloudPoll() {
   if (cloudPollTimer) return;
+  try { pruneLocalData(); } catch (e) {}
   cloudPollTimer = setInterval(async () => {
     if (!currentUser || document.hidden) return;
     const modal = document.getElementById('modalOverlay');
@@ -4668,6 +4706,18 @@ const LIBRARY_CATALOG = [
 ].map(b => ({ id: b[0], title: b[1], author: b[2], cat: b[3], emoji: b[4], desc: b[5], url: b[6], level: b[7], mins: b[8] }));
 
 const LIB_BOOKS_BY_ID = new Map(LIBRARY_CATALOG.map(b => [b.id, b]));
+
+// One-click PDF. Project Gutenberg publishes a stable generated PDF for every
+// public-domain ebook at /cache/epub/<id>/pg<id>.pdf, so we can link it exactly
+// instead of making students hunt for it. OpenStax serves PDFs behind signed
+// URLs, so those fall back to their official read/download page.
+function libPdfUrl(b) {
+  if (!b) return '';
+  if (b.pdf) return b.pdf;
+  const g = /gutenberg\.org\/ebooks\/(\d+)/.exec(b.url || '');
+  if (g) return 'https://www.gutenberg.org/cache/epub/' + g[1] + '/pg' + g[1] + '.pdf';
+  return '';
+}
 let libCustomCache = [];
 let libCat = 'all';
 let libQuery = '';
@@ -4745,6 +4795,7 @@ function drawLibrary() {
       <div class="lib-stat"><b>${readN}</b><span>opened</span></div>
       <div class="lib-stat"><b>${savedN}</b><span>saved</span></div>
     </div>
+    <a href="/pdfs" target="_blank" rel="noopener" class="btn btn-ghost w-full" style="margin-bottom:12px;display:block;text-align:center;">📄 All direct PDF links — one page, no searching</a>
     <div class="search-bar"><span>🔍</span><input id="libSearch" placeholder="Search by title, author or topic…" value="${escapeHtml(libQuery)}" oninput="libSearchChanged(this.value)"></div>
     <div class="pill-row" id="libCats">${pills}</div>
     ${isAdmin ? `<div class="card" style="padding:12px;"><div style="display:flex;justify-content:space-between;align-items:center;cursor:pointer;" onclick="document.getElementById('libAddBox').style.display=document.getElementById('libAddBox').style.display==='none'?'block':'none';">
@@ -4786,6 +4837,7 @@ function drawLibGrid() {
         <div class="lib-desc">${escapeHtml(b.desc)}</div>
         <div class="lib-actions">
           <button class="lib-open" onclick="libOpen('${b.id}')">Open</button>
+          ${libPdfUrl(b) ? `<a class="lib-pdf" href="${escapeHtml(libPdfUrl(b))}" target="_blank" rel="noopener" onclick="event.stopPropagation()">📄 PDF</a>` : ''}
           <button class="lib-save ${isSaved ? 'on' : ''}" onclick="libToggleSave('${b.id}')">${isSaved ? '★' : '☆'}</button>
           ${b.custom && currentUser.role === 'admin' ? `<button class="lib-save" style="background:rgba(239,68,68,.15);color:#f87171;" onclick="libDeleteBook('${b.id}')">🗑</button>` : ''}
         </div>
