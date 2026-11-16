@@ -4654,7 +4654,17 @@ const LIBRARY_CATALOG = [
   ['ncert', 'NCERT Textbooks (Classes 6–12)', 'NCERT', 'exam', '🇮🇳', 'Official school textbooks for every class and subject.', 'https://ncert.nic.in/textbook.php', 'All levels', 2400],
   ['khan-math', 'Khan Academy Math', 'Khan Academy', 'exam', '➗', 'Free lessons from arithmetic to calculus, with practice.', 'https://www.khanacademy.org/math', 'All levels', 1800],
   ['khan-science', 'Khan Academy Science', 'Khan Academy', 'exam', '🔬', 'Physics, chemistry, biology and more — free.', 'https://www.khanacademy.org/science', 'All levels', 1800],
-  ['khan-computing', 'Khan Academy Computing', 'Khan Academy', 'tech', '⌨️', 'Programming, algorithms and the internet, from scratch.', 'https://www.khanacademy.org/computing', 'Beginner', 1200]
+  ['khan-computing', 'Khan Academy Computing', 'Khan Academy', 'tech', '⌨️', 'Programming, algorithms and the internet, from scratch.', 'https://www.khanacademy.org/computing', 'Beginner', 1200],
+  ['jekyll-hyde', 'Strange Case of Dr Jekyll and Mr Hyde', 'Robert Louis Stevenson', 'classic', '🧪', 'One man, two natures, and a very short, very gripping novella.', 'https://www.gutenberg.org/ebooks/43', 'Beginner', 180],
+  ['jane-eyre', 'Jane Eyre', 'Charlotte Brontë', 'classic', '🕯️', 'A governess with a spine of steel and a house full of secrets.', 'https://www.gutenberg.org/ebooks/1260', 'Intermediate', 660],
+  ['wuthering-heights', 'Wuthering Heights', 'Emily Brontë', 'classic', '🌪️', 'Love, revenge and the moors — intense from the first page.', 'https://www.gutenberg.org/ebooks/768', 'Intermediate', 600],
+  ['tale-two-cities', 'A Tale of Two Cities', 'Charles Dickens', 'classic', '🗡️', 'London, Paris and sacrifice set against revolution.', 'https://www.gutenberg.org/ebooks/98', 'Intermediate', 660],
+  ['yellow-wallpaper', 'The Yellow Wallpaper', 'Charlotte Perkins Gilman', 'fiction', '🟡', 'A short, chilling story about rest, isolation and a room.', 'https://www.gutenberg.org/ebooks/1952', 'Intermediate', 60],
+  ['bhagavad-gita', 'The Bhagavad Gita', 'Vyasa (translated)', 'philosophy', '🪔', 'A dialogue on duty, action and the self, in readable English.', 'https://www.gutenberg.org/ebooks/2388', 'Intermediate', 240],
+  ['tao-te-ching', 'Tao Te Ching', 'Laozi', 'philosophy', '☯️', 'Eighty-one short chapters on simplicity and balance.', 'https://www.gutenberg.org/ebooks/216', 'Beginner', 120],
+  ['on-liberty', 'On Liberty', 'John Stuart Mill', 'philosophy', '🕊️', 'The classic argument for freedom of thought and expression.', 'https://www.gutenberg.org/ebooks/349', 'Advanced', 300],
+  ['openstax-american-gov', 'American Government 3e', 'OpenStax', 'history', '🏛️', 'How US institutions work, from the Constitution to elections.', 'https://openstax.org/details/books/american-government-3e', 'Intermediate', 1800],
+  ['openstax-organic-chem', 'Organic Chemistry', 'OpenStax', 'science', '🧪', 'Structures, reactions and mechanisms with worked problems.', 'https://openstax.org/details/books/organic-chemistry', 'Advanced', 2400]
 ].map(b => ({ id: b[0], title: b[1], author: b[2], cat: b[3], emoji: b[4], desc: b[5], url: b[6], level: b[7], mins: b[8] }));
 
 const LIB_BOOKS_BY_ID = new Map(LIBRARY_CATALOG.map(b => [b.id, b]));
@@ -4666,7 +4676,30 @@ function libProgress() {
   const p = storeGet('lib_' + currentUser.username);
   return p && typeof p === 'object' ? p : { read: {}, saved: {} };
 }
-function libSaveProgress(p) { storeSet('lib_' + currentUser.username, p); }
+function libSaveProgress(p) {
+  storeSet('lib_' + currentUser.username, p);
+  try { gamifySoon('library'); } catch (e) {}
+}
+// Mirror one book's state to Supabase so the same account sees it on every device.
+function libSync(bookId, status) {
+  const uidv = localStorage.getItem('sb_uid');
+  if (!uidv || !bookId) return;
+  sbCfg().then(() => {
+    if (!SB.ready) return;
+    const base = SB.url + '/rest/v1/library_progress';
+    if (!status) {
+      fetch(base + '?user_id=eq.' + encodeURIComponent(uidv) + '&book_id=eq.' + encodeURIComponent(bookId), {
+        method: 'DELETE', headers: { apikey: SB.key, Authorization: 'Bearer ' + (SB.tok || SB.key) }
+      }).catch(() => {});
+      return;
+    }
+    fetch(base + '?on_conflict=user_id,book_id', {
+      method: 'POST',
+      headers: { apikey: SB.key, Authorization: 'Bearer ' + (SB.tok || SB.key), 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+      body: JSON.stringify([{ user_id: uidv, book_id: bookId, status, percent: status === 'finished' ? 100 : 0, updated_at: new Date().toISOString() }])
+    }).catch(() => {});
+  }).catch(() => {});
+}
 function libAllBooks() {
   const seen = new Set(LIBRARY_CATALOG.map(b => b.id));
   const extra = libCustomCache.filter(b => b && b.id && !seen.has(b.id));
@@ -4768,7 +4801,7 @@ function libOpen(id) {
   if (!b) return;
   const p = libProgress();
   p.read = p.read || {};
-  if (!p.read[id]) { p.read[id] = Date.now(); libSaveProgress(p); }
+  if (!p.read[id]) { p.read[id] = Date.now(); libSaveProgress(p); libSync(id, 'reading'); }
   try { gamifyTick('library'); } catch (e) {}
   window.open(b.url, '_blank', 'noopener');
   drawLibGrid();
@@ -4777,7 +4810,7 @@ function libToggleSave(id) {
   const p = libProgress();
   p.saved = p.saved || {};
   if (p.saved[id]) delete p.saved[id]; else p.saved[id] = Date.now();
-  libSaveProgress(p); drawLibrary();
+  libSaveProgress(p); libSync(id, p.saved[id] ? 'saved' : null); drawLibrary();
 }
 async function libAddBook() {
   const title = (document.getElementById('libAddTitle').value || '').trim();
@@ -4977,9 +5010,12 @@ async function submitVideo() {
     const row = { user_id: localStorage.getItem('sb_uid') || null, username: currentUser.username, email, title, description, category, url, storage_path: storagePath, status: 'pending' };
     let online = false;
     try { await sbReq('POST', '/rest/v1/video_submissions', row, true); online = true; } catch (e) {}
-    const local = localVideos();
-    local.unshift({ id: 'local_' + uid(), title, description, desc: description, category, url, storage_path: storagePath, status: 'pending', created_at: new Date().toISOString(), local: true });
-    saveLocalVideos(local);
+    if (!online) {
+      // Only keep a device copy when the cloud save failed, so "My uploads" never shows the same video twice.
+      const local = localVideos();
+      local.unshift({ id: 'local_' + uid(), title, description, desc: description, category, url, storage_path: storagePath, status: 'pending', created_at: new Date().toISOString(), local: true });
+      saveLocalVideos(local);
+    }
     const vs = storeGet('vstats_' + currentUser.username) || { watch: 0, submit: 0, approved: 0 };
     vs.submit = (vs.submit || 0) + 1; storeSet('vstats_' + currentUser.username, vs);
     try { gamifyTick('video'); } catch (e) {}
@@ -5110,7 +5146,16 @@ async function notifLoad() {
     const local = notifLocal();
     const known = new Set(local.map(n => n.id));
     let changed = false;
-    rows.forEach(r => { if (!known.has(r.id)) { local.push({ id: r.id, title: r.title, body: r.body, kind: r.kind, link: r.link, read: !!r.read, created_at: r.created_at }); changed = true; } });
+    rows.forEach(r => {
+      if (known.has(r.id)) return;
+      // A notification is written locally first and then to the cloud, so the same
+      // message can arrive with two ids. Match it to the local copy instead of adding a duplicate.
+      const dupe = local.find(n => n.title === r.title && (n.body || '') === (r.body || '') && (n.kind || 'info') === (r.kind || 'info')
+        && Math.abs(new Date(n.created_at || 0).getTime() - new Date(r.created_at || 0).getTime()) < 180000);
+      if (dupe) { dupe.id = r.id; dupe.read = !!r.read; known.add(r.id); changed = true; return; }
+      local.push({ id: r.id, title: r.title, body: r.body, kind: r.kind, link: r.link, read: !!r.read, created_at: r.created_at });
+      known.add(r.id); changed = true;
+    });
     if (changed) { local.sort((a, b) => new Date(b.created_at || 0) - new Date(a.created_at || 0)); notifSave(local); }
     updateNotifBadge();
   } catch (e) {}
@@ -5533,8 +5578,49 @@ function dailySurprise(force) {
     openModal(`<div style="text-align:center;padding:8px 4px;"><div style="font-size:3rem;">🎁</div><div style="font-weight:900;font-size:1.1rem;margin:6px 0 4px;color:var(--accent3);">A surprise reward!</div><div style="font-size:.84rem;color:var(--muted);">You already own every surprise badge, so here is <b style="color:var(--text);">+25 bonus XP</b> instead.</div><button class="btn btn-accent w-full mt-16" onclick="closeModalDirect()">Collect</button></div>`);
   }
 }
-function initGamification() {
+async function gamifyHydrate() {
   if (!currentUser) return;
+  const uidv = localStorage.getItem('sb_uid');
+  if (!uidv) return;
+  try {
+    const q = '&user_id=eq.' + encodeURIComponent(uidv);
+    const [st, badges, prog] = await Promise.all([
+      sbGet('user_streaks', 'select=*' + q + '&limit=1').catch(() => []),
+      sbGet('user_badges', 'select=badge_id' + q + '&limit=1000').catch(() => []),
+      sbGet('library_progress', 'select=book_id,status' + q + '&limit=1000').catch(() => [])
+    ]);
+    if (Array.isArray(st) && st[0]) {
+      const r = st[0];
+      const local = storeGet('streak_' + currentUser.username) || {};
+      const cloudLast = r.last_day ? String(r.last_day).slice(0, 10) : null;
+      const last = cloudLast && (!local.last || cloudLast > local.last) ? cloudLast : local.last;
+      storeSet('streak_' + currentUser.username, {
+        current: Math.max(Number(local.current) || 0, Number(r.current_streak) || 0),
+        best: Math.max(Number(local.best) || 0, Number(r.best_streak) || 0),
+        total: Math.max(Number(local.total) || 0, Number(r.total_days) || 0),
+        last
+      });
+    }
+    if (Array.isArray(badges) && badges.length) {
+      const owned = badgeOwned();
+      badges.forEach(b => { if (b && b.badge_id) owned.add(b.badge_id); });
+      badgeSave(owned);
+    }
+    if (Array.isArray(prog) && prog.length) {
+      const p = libProgress();
+      p.read = p.read || {}; p.saved = p.saved || {};
+      prog.forEach(x => {
+        if (!x || !x.book_id) return;
+        if (x.status === 'saved') { if (!p.saved[x.book_id]) p.saved[x.book_id] = Date.now(); }
+        else { if (!p.read[x.book_id]) p.read[x.book_id] = Date.now(); }
+      });
+      storeSet('lib_' + currentUser.username, p);
+    }
+  } catch (e) {}
+}
+async function initGamification() {
+  if (!currentUser) return;
+  try { await gamifyHydrate(); } catch (e) {}
   const u = currentUser.username;
   const flags = storeGet('flags_' + u) || {};
   const h = new Date().getHours();
